@@ -22,6 +22,20 @@ struct ActiveWorkoutView: View {
         session.exerciseLogs.sorted { $0.sortOrder < $1.sortOrder }
     }
 
+    private var groupedLogs: [(String, [ExerciseLog])] {
+        var result: [(String, [ExerciseLog])] = []
+        var currentSection = "\u{0}" // impossible sentinel
+        for log in sortedLogs {
+            if log.section != currentSection {
+                currentSection = log.section
+                result.append((currentSection, [log]))
+            } else {
+                result[result.count - 1].1.append(log)
+            }
+        }
+        return result
+    }
+
     private var completedCount: Int {
         sortedLogs.flatMap(\.sets).filter(\.isCompleted).count
     }
@@ -39,12 +53,21 @@ struct ActiveWorkoutView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     headerCard
-                    ForEach(sortedLogs) { log in
-                        ExerciseSectionView(
-                            log: log,
-                            previousSession: previousSession,
-                            onSetCompleted: { startRestTimer() }
-                        )
+                    ForEach(groupedLogs, id: \.0) { sectionName, logs in
+                        if !sectionName.isEmpty {
+                            Text(sectionName)
+                                .font(.subheadline.bold())
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.top, 4)
+                        }
+                        ForEach(logs) { log in
+                            ExerciseSectionView(
+                                log: log,
+                                previousSession: previousSession,
+                                onSetCompleted: { startRestTimer() }
+                            )
+                        }
                     }
 
                     // Add exercise mid-workout
