@@ -11,6 +11,7 @@ final class WorkoutSession {
     @Relationship(deleteRule: .cascade, inverse: \ExerciseLog.session)
     var exerciseLogs: [ExerciseLog] = []
     var notes: String = ""
+    var rpe: Int?
 
     init(date: Date = .now, plan: WorkoutPlan? = nil) {
         self.date = date
