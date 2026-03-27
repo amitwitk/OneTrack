@@ -28,6 +28,7 @@ struct ContentView: View {
             WorkoutPlan.self, Exercise.self,
             WorkoutSession.self, ExerciseLog.self, SetLog.self,
             MealEntry.self, Ingredient.self,
-            BodyMeasurement.self, WeightEntry.self
+            BodyMeasurement.self, WeightEntry.self,
+            CustomExercise.self
         ], inMemory: true)
 }
