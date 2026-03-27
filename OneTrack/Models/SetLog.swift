@@ -8,6 +8,7 @@ final class SetLog {
     var seconds: Int = 0
     var weightKg: Double = 0
     var isCompleted: Bool = false
+    var isPersonalRecord: Bool = false
     var exerciseLog: ExerciseLog?
 
     init(setNumber: Int, reps: Int = 0, seconds: Int = 0, weightKg: Double = 0) {

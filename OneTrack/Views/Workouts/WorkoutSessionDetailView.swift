@@ -23,6 +23,11 @@ struct WorkoutSessionDetailView: View {
                         HStack {
                             Text("Set \(setLog.setNumber)")
                                 .font(.subheadline)
+                            if setLog.isPersonalRecord {
+                                Image(systemName: "trophy.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.yellow)
+                            }
                             Spacer()
                             Text(log.isIsometric ? "\(setLog.seconds)s" : "\(setLog.reps) reps")
                                 .monospacedDigit()
