@@ -6,7 +6,7 @@ import Foundation
 struct ExerciseDatabaseTests {
 
     @Test func exercisesNotEmpty() {
-        #expect(ExerciseDatabase.exercises.count >= 36)
+        #expect(ExerciseDatabase.exercises.count >= 40)
     }
 
     @Test func categoriesOrder() {
@@ -40,6 +40,24 @@ struct ExerciseDatabaseTests {
         #expect(chest.count == 7)
     }
 
+    @Test func isometricExercisesExist() {
+        let iso = ExerciseDatabase.exercises.filter(\.isIsometric)
+        #expect(iso.count >= 4)
+        #expect(iso.allSatisfy { $0.defaultSeconds > 0 })
+    }
+
+    @Test func isometricDisplayTarget() {
+        let plank = ExerciseDatabase.exercises.first { $0.name == "Plank" }!
+        #expect(plank.isIsometric)
+        #expect(plank.displayTarget == "3 x 60s")
+    }
+
+    @Test func repBasedDisplayTarget() {
+        let bench = ExerciseDatabase.exercises.first { $0.name == "Bench Press" }!
+        #expect(!bench.isIsometric)
+        #expect(bench.displayTarget == "4 x 10")
+    }
+
     @Test func exercisesInInvalidCategory() {
         let results = ExerciseDatabase.exercises(in: "Nonexistent")
         #expect(results.isEmpty)
@@ -48,7 +66,11 @@ struct ExerciseDatabaseTests {
     @Test func allExercisesHaveValidDefaults() {
         for exercise in ExerciseDatabase.exercises {
             #expect(exercise.defaultSets > 0, "Exercise \(exercise.name) has invalid sets")
-            #expect(exercise.defaultReps > 0, "Exercise \(exercise.name) has invalid reps")
+            if exercise.isIsometric {
+                #expect(exercise.defaultSeconds > 0, "Isometric exercise \(exercise.name) has invalid seconds")
+            } else {
+                #expect(exercise.defaultReps > 0, "Exercise \(exercise.name) has invalid reps")
+            }
         }
     }
 }

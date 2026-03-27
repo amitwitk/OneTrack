@@ -17,7 +17,7 @@ struct CreatePlanView: View {
             _planName = State(initialValue: plan.name)
             _exercises = State(initialValue: plan.exercises
                 .sorted { $0.sortOrder < $1.sortOrder }
-                .map { EditableExercise(name: $0.name, sets: $0.targetSets, reps: $0.targetReps) }
+                .map { EditableExercise(name: $0.name, sets: $0.targetSets, reps: $0.targetReps, isIsometric: $0.isIsometric, seconds: $0.targetSeconds) }
             )
         }
     }
@@ -96,7 +96,9 @@ struct CreatePlanView: View {
                     exercises.append(EditableExercise(
                         name: template.name,
                         sets: template.defaultSets,
-                        reps: template.defaultReps
+                        reps: template.defaultReps,
+                        isIsometric: template.isIsometric,
+                        seconds: template.defaultSeconds
                     ))
                 }
             }
@@ -111,7 +113,9 @@ struct CreatePlanView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(exercise.name)
                     .font(.subheadline.bold())
-                Text("\(exercise.sets) sets x \(exercise.reps) reps")
+                Text(exercise.isIsometric
+                    ? "\(exercise.sets) sets x \(exercise.seconds)s"
+                    : "\(exercise.sets) sets x \(exercise.reps) reps")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -140,7 +144,7 @@ struct CreatePlanView: View {
             }
             // Add new
             for (index, ex) in exercises.enumerated() {
-                let exercise = Exercise(name: ex.name, targetSets: ex.sets, targetReps: ex.reps, sortOrder: index)
+                let exercise = Exercise(name: ex.name, targetSets: ex.sets, targetReps: ex.reps, sortOrder: index, isIsometric: ex.isIsometric, targetSeconds: ex.seconds)
                 exercise.plan = plan
                 modelContext.insert(exercise)
             }
@@ -157,7 +161,7 @@ struct CreatePlanView: View {
             modelContext.insert(plan)
 
             for (index, ex) in exercises.enumerated() {
-                let exercise = Exercise(name: ex.name, targetSets: ex.sets, targetReps: ex.reps, sortOrder: index)
+                let exercise = Exercise(name: ex.name, targetSets: ex.sets, targetReps: ex.reps, sortOrder: index, isIsometric: ex.isIsometric, targetSeconds: ex.seconds)
                 exercise.plan = plan
                 modelContext.insert(exercise)
             }
@@ -175,6 +179,16 @@ struct EditableExercise: Identifiable {
     var name: String
     var sets: Int
     var reps: Int
+    var isIsometric: Bool
+    var seconds: Int
+
+    init(name: String, sets: Int, reps: Int, isIsometric: Bool = false, seconds: Int = 30) {
+        self.name = name
+        self.sets = sets
+        self.reps = reps
+        self.isIsometric = isIsometric
+        self.seconds = seconds
+    }
 }
 
 // MARK: - Exercise Picker
@@ -214,7 +228,7 @@ struct ExercisePickerView: View {
                                         Text(exercise.name)
                                             .font(.subheadline)
                                             .foregroundStyle(.primary)
-                                        Text("\(exercise.defaultSets) x \(exercise.defaultReps)")
+                                        Text(exercise.displayTarget)
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                     }

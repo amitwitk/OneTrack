@@ -201,7 +201,7 @@ struct WorkoutPlanListView: View {
         let previous = findPreviousSession(for: session)
 
         for exercise in plan.exercises.sorted(by: { $0.sortOrder < $1.sortOrder }) {
-            let log = ExerciseLog(exerciseName: exercise.name, sortOrder: exercise.sortOrder)
+            let log = ExerciseLog(exerciseName: exercise.name, sortOrder: exercise.sortOrder, isIsometric: exercise.isIsometric)
             log.session = session
             modelContext.insert(log)
 
@@ -213,6 +213,7 @@ struct WorkoutPlanListView: View {
                 let setLog = SetLog(
                     setNumber: setIndex + 1,
                     reps: prevSet?.reps ?? exercise.targetReps,
+                    seconds: prevSet?.seconds ?? exercise.targetSeconds,
                     weightKg: prevSet?.weightKg ?? 0
                 )
                 setLog.exerciseLog = log

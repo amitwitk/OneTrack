@@ -14,3 +14,4 @@ final class BodyMeasurement {
         self.date = date
     }
 }
+
