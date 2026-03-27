@@ -4,6 +4,7 @@ import SwiftData
 struct WorkoutsTabView: View {
     @State private var showingHistory = false
     @State private var showingCreatePlan = false
+    @State private var showingImport = false
 
     var body: some View {
         NavigationStack {
@@ -16,8 +17,19 @@ struct WorkoutsTabView: View {
                         }
                     }
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button("New", systemImage: "plus") {
-                            showingCreatePlan = true
+                        Menu {
+                            Button {
+                                showingCreatePlan = true
+                            } label: {
+                                Label("New Workout", systemImage: "plus")
+                            }
+                            Button {
+                                showingImport = true
+                            } label: {
+                                Label("Import from Text", systemImage: "doc.text")
+                            }
+                        } label: {
+                            Image(systemName: "plus")
                         }
                     }
                 }
@@ -35,6 +47,11 @@ struct WorkoutsTabView: View {
                 .sheet(isPresented: $showingCreatePlan) {
                     NavigationStack {
                         CreatePlanView()
+                    }
+                }
+                .sheet(isPresented: $showingImport) {
+                    NavigationStack {
+                        ImportPlanView()
                     }
                 }
         }
