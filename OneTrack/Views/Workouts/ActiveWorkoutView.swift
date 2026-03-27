@@ -11,6 +11,7 @@ struct ActiveWorkoutView: View {
     @State private var isTimerRunning = true
     @State private var showFinishConfirmation = false
     @State private var showCancelConfirmation = false
+    @State private var showAddExercise = false
 
     // Rest timer
     @State private var restTimeRemaining: Int = 0
@@ -45,6 +46,20 @@ struct ActiveWorkoutView: View {
                             onSetCompleted: { startRestTimer() }
                         )
                     }
+
+                    // Add exercise mid-workout
+                    Button {
+                        showAddExercise = true
+                    } label: {
+                        Label("Add Exercise", systemImage: "plus.circle")
+                            .font(.subheadline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(.background, in: RoundedRectangle(cornerRadius: 12))
+                            .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
+                    }
+                    .buttonStyle(.plain)
+
                     Color.clear.frame(height: isResting ? 80 : 0)
                 }
                 .padding()
@@ -96,6 +111,11 @@ struct ActiveWorkoutView: View {
         }
         .onAppear {
             restDuration = session.plan?.defaultRestSeconds ?? 90
+        }
+        .sheet(isPresented: $showAddExercise) {
+            ExercisePickerView { templates in
+                addExercises(templates)
+            }
         }
         .task(id: "workout-timer") {
             while isTimerRunning && !Task.isCancelled {
@@ -219,6 +239,31 @@ struct ActiveWorkoutView: View {
     }
 
     // MARK: - Actions
+
+    private func addExercises(_ templates: [ExerciseTemplate]) {
+        let maxOrder = sortedLogs.last?.sortOrder ?? -1
+        for (index, template) in templates.enumerated() {
+            let log = ExerciseLog(
+                exerciseName: template.name,
+                sortOrder: maxOrder + 1 + index,
+                isIsometric: template.isIsometric
+            )
+            log.session = session
+            modelContext.insert(log)
+
+            for setIndex in 0..<template.defaultSets {
+                let setLog = SetLog(
+                    setNumber: setIndex + 1,
+                    reps: template.defaultReps,
+                    seconds: template.defaultSeconds,
+                    weightKg: 0
+                )
+                setLog.exerciseLog = log
+                modelContext.insert(setLog)
+            }
+        }
+        try? modelContext.save()
+    }
 
     private func startRestTimer() {
         restTimeRemaining = restDuration
