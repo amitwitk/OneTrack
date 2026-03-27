@@ -1,0 +1,35 @@
+# Xcode
+build/
+DerivedData/
+*.xcuserdata
+*.xcworkspace
+xcuserdata/
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.build/
+Packages/
+Package.pins
+Package.resolved
+
+# CocoaPods
+Pods/
+
+# macOS
+.DS_Store
+*.swp
+*~.nib
+
+# Claude Code
+.claude/
+.agents/
+skills-lock.json
+
+# Environment
+.env
+.env.local
