@@ -291,7 +291,7 @@ private struct ExerciseSectionView: View {
                     .frame(width: 36)
                 Text("PREVIOUS")
                     .frame(maxWidth: .infinity)
-                Text("REPS")
+                Text(log.isIsometric ? "SEC" : "REPS")
                     .frame(width: 100)
                 Text("KG")
                     .frame(width: 110)
@@ -306,7 +306,7 @@ private struct ExerciseSectionView: View {
             // Set rows
             ForEach(sortedSets) { setLog in
                 let prevSet = setLog.setNumber <= previousSets.count ? previousSets[setLog.setNumber - 1] : nil
-                SetRowView(setLog: setLog, previousSet: prevSet, onCompleted: onSetCompleted)
+                SetRowView(setLog: setLog, previousSet: prevSet, isIsometric: log.isIsometric, onCompleted: onSetCompleted)
 
                 if setLog.setNumber < sortedSets.count {
                     Divider()
@@ -324,10 +324,15 @@ private struct ExerciseSectionView: View {
 private struct SetRowView: View {
     @Bindable var setLog: SetLog
     let previousSet: SetLog?
+    let isIsometric: Bool
     let onCompleted: () -> Void
 
     private var isImproved: Bool {
         guard let prev = previousSet else { return false }
+        if isIsometric {
+            return setLog.weightKg > prev.weightKg ||
+                (setLog.weightKg == prev.weightKg && setLog.seconds > prev.seconds)
+        }
         return setLog.weightKg > prev.weightKg ||
             (setLog.weightKg == prev.weightKg && setLog.reps > prev.reps)
     }
@@ -345,9 +350,15 @@ private struct SetRowView: View {
             // Previous
             Group {
                 if let prev = previousSet {
-                    Text("\(prev.reps) x \(prev.weightKg.compactWeight)")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.tertiary)
+                    if isIsometric {
+                        Text("\(prev.seconds)s x \(prev.weightKg.compactWeight)")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.tertiary)
+                    } else {
+                        Text("\(prev.reps) x \(prev.weightKg.compactWeight)")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.tertiary)
+                    }
                 } else {
                     Text("--")
                         .font(.caption)
@@ -356,17 +367,30 @@ private struct SetRowView: View {
             }
             .frame(maxWidth: .infinity)
 
-            // Reps stepper
-            StepperInput(
-                value: Binding(
-                    get: { Double(setLog.reps) },
-                    set: { setLog.reps = Int($0) }
-                ),
-                label: "",
-                step: 1,
-                range: 0...99
-            )
-            .frame(width: 100)
+            // Reps or Seconds stepper
+            if isIsometric {
+                StepperInput(
+                    value: Binding(
+                        get: { Double(setLog.seconds) },
+                        set: { setLog.seconds = Int($0) }
+                    ),
+                    label: "",
+                    step: 5,
+                    range: 0...600
+                )
+                .frame(width: 100)
+            } else {
+                StepperInput(
+                    value: Binding(
+                        get: { Double(setLog.reps) },
+                        set: { setLog.reps = Int($0) }
+                    ),
+                    label: "",
+                    step: 1,
+                    range: 0...99
+                )
+                .frame(width: 100)
+            }
 
             // Weight stepper
             StepperInput(

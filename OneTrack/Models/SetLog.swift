@@ -5,13 +5,15 @@ import SwiftData
 final class SetLog {
     var setNumber: Int = 0
     var reps: Int = 0
+    var seconds: Int = 0
     var weightKg: Double = 0
     var isCompleted: Bool = false
     var exerciseLog: ExerciseLog?
 
-    init(setNumber: Int, reps: Int = 0, weightKg: Double = 0) {
+    init(setNumber: Int, reps: Int = 0, seconds: Int = 0, weightKg: Double = 0) {
         self.setNumber = setNumber
         self.reps = reps
+        self.seconds = seconds
         self.weightKg = weightKg
     }
 }

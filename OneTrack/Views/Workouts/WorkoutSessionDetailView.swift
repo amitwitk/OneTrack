@@ -24,7 +24,7 @@ struct WorkoutSessionDetailView: View {
                             Text("Set \(setLog.setNumber)")
                                 .font(.subheadline)
                             Spacer()
-                            Text("\(setLog.reps) reps")
+                            Text(log.isIsometric ? "\(setLog.seconds)s" : "\(setLog.reps) reps")
                                 .monospacedDigit()
                             Text("@")
                                 .foregroundStyle(.secondary)
