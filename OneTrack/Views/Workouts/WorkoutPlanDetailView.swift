@@ -3,6 +3,8 @@ import SwiftData
 
 struct WorkoutPlanDetailView: View {
     let plan: WorkoutPlan
+    @Environment(\.modelContext) private var modelContext
+    @State private var exerciseToEdit: Exercise?
 
     private var sortedExercises: [Exercise] {
         plan.exercises.sorted { $0.sortOrder < $1.sortOrder }
@@ -14,32 +16,40 @@ struct WorkoutPlanDetailView: View {
 
     var body: some View {
         List {
-            // Exercises
             Section("Exercises") {
-                ForEach(Array(sortedExercises.enumerated()), id: \.element.id) { index, exercise in
-                    HStack(spacing: 12) {
-                        Text("\(index + 1)")
-                            .font(.caption.bold())
-                            .foregroundStyle(.white)
-                            .frame(width: 24, height: 24)
-                            .background(.blue, in: Circle())
+                ForEach(sortedExercises) { exercise in
+                    Button {
+                        exerciseToEdit = exercise
+                    } label: {
+                        HStack(spacing: 12) {
+                            Text(exercise.name)
+                                .foregroundStyle(.primary)
 
-                        Text(exercise.name)
+                            Spacer()
 
-                        Spacer()
+                            Text(exercise.targetDisplay)
+                                .foregroundStyle(.secondary)
+                                .font(.subheadline.monospacedDigit())
 
-                        Text("\(exercise.targetSets) x \(exercise.targetReps)")
-                            .foregroundStyle(.secondary)
-                            .font(.subheadline.monospacedDigit())
+                            Image(systemName: "chevron.right")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
                     }
+                }
+                .onMove { from, to in
+                    var exercises = sortedExercises
+                    exercises.move(fromOffsets: from, toOffset: to)
+                    for (index, exercise) in exercises.enumerated() {
+                        exercise.sortOrder = index
+                    }
+                    try? modelContext.save()
                 }
             }
 
-            // Stats
             if !completedSessions.isEmpty {
                 Section("Stats") {
                     LabeledContent("Total Sessions", value: "\(completedSessions.count)")
-
                     if let lastSession = completedSessions.first {
                         LabeledContent("Last Workout", value: lastSession.date.shortDate)
                         if let d = lastSession.durationSeconds {
@@ -49,7 +59,6 @@ struct WorkoutPlanDetailView: View {
                 }
             }
 
-            // Recent history
             if !completedSessions.isEmpty {
                 Section("Recent Sessions") {
                     ForEach(completedSessions.prefix(5)) { session in
@@ -76,5 +85,63 @@ struct WorkoutPlanDetailView: View {
             }
         }
         .navigationTitle(plan.name)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                EditButton()
+            }
+        }
+        .sheet(item: $exerciseToEdit) { exercise in
+            NavigationStack {
+                EditExerciseView(exercise: exercise)
+            }
+        }
+    }
+}
+
+// MARK: - Edit Exercise Sheet
+
+struct EditExerciseView: View {
+    @Bindable var exercise: Exercise
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+
+    var body: some View {
+        Form {
+            Section("Exercise") {
+                Text(exercise.name)
+                    .font(.headline)
+            }
+
+            Section("Sets & Reps") {
+                Stepper("Sets: \(exercise.targetSets)", value: $exercise.targetSets, in: 1...10)
+
+                if exercise.isIsometric {
+                    Stepper("Seconds: \(exercise.targetSeconds)", value: $exercise.targetSeconds, in: 5...300, step: 5)
+                } else {
+                    Stepper("Reps: \(exercise.targetReps)", value: $exercise.targetReps, in: 1...100)
+                }
+            }
+
+            Section {
+                HStack {
+                    Text("Target")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(exercise.targetDisplay)
+                        .font(.subheadline.bold().monospacedDigit())
+                }
+            }
+        }
+        .navigationTitle("Edit Exercise")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Done") {
+                    try? modelContext.save()
+                    dismiss()
+                }
+                .bold()
+            }
+        }
     }
 }
