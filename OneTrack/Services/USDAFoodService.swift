@@ -4,10 +4,15 @@ import Foundation
 final class USDAFoodService {
     private var foods: [FoodItem] = []
     private var isLoaded = false
+    private let bundle: Bundle
+
+    init(bundle: Bundle = .main) {
+        self.bundle = bundle
+    }
 
     func loadIfNeeded() {
         guard !isLoaded else { return }
-        guard let url = Bundle.main.url(forResource: "foundation_foods", withExtension: "json") else { return }
+        guard let url = bundle.url(forResource: "foundation_foods", withExtension: "json") else { return }
         do {
             let data = try Data(contentsOf: url)
             foods = try JSONDecoder().decode([FoodItem].self, from: data)

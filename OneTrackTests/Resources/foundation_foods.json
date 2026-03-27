@@ -1,0 +1,9 @@
+[
+  {"fdcId":1001,"description":"Chicken breast, raw","calories":120,"protein":22.5,"carbs":0,"fat":2.6},
+  {"fdcId":1002,"description":"Chicken thigh, raw","calories":177,"protein":18.5,"carbs":0,"fat":11.2},
+  {"fdcId":1003,"description":"Egg, whole, raw","calories":143,"protein":12.6,"carbs":0.7,"fat":9.5},
+  {"fdcId":1004,"description":"Rice, white, cooked","calories":130,"protein":2.7,"carbs":28.2,"fat":0.3},
+  {"fdcId":1005,"description":"Banana, raw","calories":89,"protein":1.1,"carbs":22.8,"fat":0.3},
+  {"fdcId":1006,"description":"Salmon, Atlantic, raw","calories":208,"protein":20.4,"carbs":0,"fat":13.4},
+  {"fdcId":1007,"description":"Broccoli, raw","calories":34,"protein":2.8,"carbs":6.6,"fat":0.4}
+]
