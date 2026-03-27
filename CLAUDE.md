@@ -73,3 +73,24 @@ A personal all-in-one fitness and health tracking iOS app built with Swift/Swift
 - **Offline-first:** core features work without internet
 - **Gym-friendly:** stepper inputs, large tap targets, rest timer — no keyboard needed
 - **Clean UI:** inspired by Strong/Hevy — simple cards, no flashy colors
+
+## Source Control
+
+- **Repository:** https://github.com/amitwitk/OneTrack (public)
+- **Branch protection:** PRs required to merge to `main`, CI must pass
+- **CI:** GitHub Actions (`.github/workflows/ci.yml`) — build + test on macOS 15 / Xcode 16.4 / iOS Simulator
+
+## Development Workflow
+
+For each feature or bug fix:
+
+1. **Pick an issue** from [GitHub Issues](https://github.com/amitwitk/OneTrack/issues) — labeled by domain (`workout`, `nutrition`, `body`, `activity`, `dashboard`)
+2. **Create a branch** from `main` — `feat/<name>` or `fix/<name>`
+3. **Plan** the implementation (identify models, views, and dependencies)
+4. **Implement** with clean, testable code — extract logic into standalone functions/structs for testability
+5. **Add tests** — unit tests using Swift Testing framework, in-memory SwiftData containers, aim for coverage on all new logic
+6. **Build and test locally** — `xcodebuild test -scheme OneTrack -destination 'platform=iOS Simulator,name=iPhone 16' CODE_SIGNING_ALLOWED=NO`
+7. **Commit and push** — conventional commit messages (`feat:`, `fix:`, `test:`, `refactor:`)
+8. **Create PR** — with summary, test plan, and `Closes #N`
+9. **CI must pass** — GitHub Actions runs build + test automatically
+10. **Squash merge** to `main` — keeps history clean
