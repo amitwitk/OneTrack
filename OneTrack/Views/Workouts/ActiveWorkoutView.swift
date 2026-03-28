@@ -11,6 +11,7 @@ struct ActiveWorkoutView: View {
     @State private var isTimerRunning = true
     @State private var showFinishConfirmation = false
     @State private var showCancelConfirmation = false
+    @State private var showFinishSummary = false
     @State private var showAddExercise = false
 
     // Rest timer
@@ -36,12 +37,16 @@ struct ActiveWorkoutView: View {
         return result
     }
 
+    private var workingSets: [SetLog] {
+        sortedLogs.flatMap(\.sets).filter { !$0.isWarmUp }
+    }
+
     private var completedCount: Int {
-        sortedLogs.flatMap(\.sets).filter(\.isCompleted).count
+        workingSets.filter(\.isCompleted).count
     }
 
     private var totalCount: Int {
-        sortedLogs.flatMap(\.sets).count
+        workingSets.count
     }
 
     private var progress: Double {
@@ -65,7 +70,8 @@ struct ActiveWorkoutView: View {
                             ExerciseSectionView(
                                 log: log,
                                 previousSession: previousSession,
-                                onSetCompleted: { startRestTimer() }
+                                onSetCompleted: { startRestTimer() },
+                                onAddSet: { addSet(to: log) }
                             )
                         }
                     }
@@ -121,7 +127,7 @@ struct ActiveWorkoutView: View {
             }
         }
         .confirmationDialog("Finish Workout?", isPresented: $showFinishConfirmation) {
-            Button("Finish Workout") { finishWorkout() }
+            Button("Finish Workout") { presentFinishSummary() }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("\(completedCount)/\(totalCount) sets completed - \(elapsedSeconds.durationString)")
@@ -131,6 +137,13 @@ struct ActiveWorkoutView: View {
             Button("Keep Going", role: .cancel) {}
         } message: {
             Text("All logged sets will be lost.")
+        }
+        .sheet(isPresented: $showFinishSummary) {
+            WorkoutFinishSummaryView(
+                session: session,
+                durationSeconds: elapsedSeconds,
+                onDone: { finishWorkout() }
+            )
         }
         .onAppear {
             restDuration = session.plan?.defaultRestSeconds ?? 90
@@ -293,11 +306,29 @@ struct ActiveWorkoutView: View {
         withAnimation { isResting = true }
     }
 
-    private func finishWorkout() {
-        session.isCompleted = true
+    private func addSet(to log: ExerciseLog) {
+        let sortedSets = log.sets.sorted { $0.setNumber < $1.setNumber }
+        let lastSet = sortedSets.last
+        let newSetNumber = (lastSet?.setNumber ?? 0) + 1
+        let newSet = SetLog(
+            setNumber: newSetNumber,
+            reps: lastSet?.reps ?? 0,
+            seconds: lastSet?.seconds ?? 0,
+            weightKg: lastSet?.weightKg ?? 0
+        )
+        newSet.exerciseLog = log
+        modelContext.insert(newSet)
+    }
+
+    private func presentFinishSummary() {
         session.durationSeconds = elapsedSeconds
         isTimerRunning = false
         isResting = false
+        showFinishSummary = true
+    }
+
+    private func finishWorkout() {
+        session.isCompleted = true
         try? modelContext.save()
         dismiss()
     }
@@ -317,6 +348,7 @@ private struct ExerciseSectionView: View {
     let log: ExerciseLog
     let previousSession: WorkoutSession?
     let onSetCompleted: () -> Void
+    let onAddSet: () -> Void
 
     private var sortedSets: [SetLog] {
         log.sets.sorted { $0.setNumber < $1.setNumber }
@@ -381,6 +413,25 @@ private struct ExerciseSectionView: View {
                         .padding(.horizontal)
                 }
             }
+
+            // Add set button
+            Divider()
+                .padding(.horizontal)
+
+            Button {
+                onAddSet()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.subheadline)
+                    Text("Add Set")
+                        .font(.subheadline.bold())
+                }
+                .foregroundStyle(.blue)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+            }
+            .buttonStyle(.plain)
         }
         .background(.background, in: RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.06), radius: 8, y: 4)
@@ -407,13 +458,14 @@ private struct SetRowView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            // Set number badge
-            Text("\(setLog.setNumber)")
-                .font(.caption.bold())
-                .foregroundStyle(.white)
-                .frame(width: 24, height: 24)
-                .background(setLog.isCompleted ? .green : .gray.opacity(0.4), in: Circle())
+            // Set number badge — long press to toggle warm-up
+            setBadge
                 .frame(width: 36)
+                .onLongPressGesture {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        setLog.setType = setLog.isWarmUp ? .normal : .warmUp
+                    }
+                }
 
             // Previous
             Group {
@@ -500,7 +552,31 @@ private struct SetRowView: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 6)
-        .background(setLog.isCompleted ? .green.opacity(0.04) : .clear)
+        .background(rowBackground)
+    }
+
+    private var rowBackground: Color {
+        if setLog.isWarmUp {
+            return .gray.opacity(0.06)
+        }
+        return setLog.isCompleted ? .green.opacity(0.04) : .clear
+    }
+
+    @ViewBuilder
+    private var setBadge: some View {
+        if setLog.isWarmUp {
+            Text("W")
+                .font(.caption.bold())
+                .foregroundStyle(.white)
+                .frame(width: 24, height: 24)
+                .background(.gray.opacity(0.5), in: Circle())
+        } else {
+            Text("\(setLog.setNumber)")
+                .font(.caption.bold())
+                .foregroundStyle(.white)
+                .frame(width: 24, height: 24)
+                .background(setLog.isCompleted ? .green : .gray.opacity(0.4), in: Circle())
+        }
     }
 }
 
@@ -540,5 +616,161 @@ private struct StepperInput<V: BinaryFloatingPoint>: View {
             }
             .buttonStyle(.plain)
         }
+    }
+}
+
+// MARK: - Workout Finish Summary
+
+struct WorkoutFinishSummaryView: View {
+    @Bindable var session: WorkoutSession
+    let durationSeconds: Int
+    let onDone: () -> Void
+
+    @State private var selectedRPE: Int = 7
+
+    private var completedWorkingSets: Int {
+        session.exerciseLogs
+            .flatMap(\.sets)
+            .filter { $0.isCompleted && !$0.isWarmUp }
+            .count
+    }
+
+    private var totalVolume: Double {
+        session.exerciseLogs
+            .flatMap(\.sets)
+            .filter { $0.isCompleted && !$0.isWarmUp }
+            .reduce(0.0) { $0 + Double($1.reps) * $1.weightKg }
+    }
+
+    private var formattedVolume: String {
+        if totalVolume >= 1000 {
+            return String(format: "%.1fk kg", totalVolume / 1000)
+        }
+        return "\(Int(totalVolume)) kg"
+    }
+
+    private static let rpeLabels: [Int: String] = [
+        1: "Very Light",
+        2: "Light",
+        3: "Moderate",
+        4: "Somewhat Hard",
+        5: "Hard",
+        6: "Harder",
+        7: "Very Hard",
+        8: "Very Hard+",
+        9: "Extremely Hard",
+        10: "Max Effort"
+    ]
+
+    private static let rpeEmojis: [Int: String] = [
+        1: "😴", 2: "😌", 3: "🙂", 4: "😐",
+        5: "😤", 6: "💪", 7: "🔥", 8: "😰",
+        9: "🥵", 10: "💀"
+    ]
+
+    var body: some View {
+        VStack(spacing: 24) {
+            // Title
+            VStack(spacing: 8) {
+                Image(systemName: "trophy.fill")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.yellow)
+                Text("Workout Complete!")
+                    .font(.title2.bold())
+                Text(session.plan?.name ?? "Workout")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.top, 24)
+
+            // Stats
+            HStack(spacing: 0) {
+                summaryStatView(
+                    value: formattedVolume,
+                    label: "Volume",
+                    icon: "scalemass.fill"
+                )
+                Divider().frame(height: 50)
+                summaryStatView(
+                    value: durationSeconds.durationString,
+                    label: "Duration",
+                    icon: "timer"
+                )
+                Divider().frame(height: 50)
+                summaryStatView(
+                    value: "\(completedWorkingSets)",
+                    label: "Sets",
+                    icon: "checkmark.circle.fill"
+                )
+            }
+            .cardStyle()
+
+            // RPE Picker
+            VStack(spacing: 12) {
+                Text("How hard was it?")
+                    .font(.headline)
+
+                Text("\(Self.rpeEmojis[selectedRPE] ?? "") \(Self.rpeLabels[selectedRPE] ?? "")")
+                    .font(.title3.bold())
+                    .animation(.none, value: selectedRPE)
+
+                // RPE slider-style picker
+                HStack(spacing: 6) {
+                    ForEach(1...10, id: \.self) { value in
+                        Button {
+                            selectedRPE = value
+                        } label: {
+                            Text("\(value)")
+                                .font(.caption.bold())
+                                .frame(width: 30, height: 30)
+                                .background(
+                                    value == selectedRPE
+                                        ? AnyShapeStyle(.blue)
+                                        : AnyShapeStyle(.fill.tertiary),
+                                    in: Circle()
+                                )
+                                .foregroundStyle(value == selectedRPE ? .white : .primary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .cardStyle()
+
+            Spacer()
+
+            // Done button
+            Button {
+                session.rpe = selectedRPE
+                onDone()
+            } label: {
+                Text("Done")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(.blue, in: RoundedRectangle(cornerRadius: 14))
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 16)
+        }
+        .padding(.horizontal)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .interactiveDismissDisabled()
+    }
+
+    private func summaryStatView(value: String, label: String, icon: String) -> some View {
+        VStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.headline.monospacedDigit())
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
     }
 }
