@@ -11,6 +11,8 @@ struct WorkoutPlanListView: View {
     @State private var activeSession: WorkoutSession?
     @State private var previousSessionForActive: WorkoutSession?
     @State private var planToEdit: WorkoutPlan?
+    @State private var planToDelete: WorkoutPlan?
+    @State private var showDeleteConfirmation = false
 
     var body: some View {
         Group {
@@ -29,6 +31,18 @@ struct WorkoutPlanListView: View {
             NavigationStack {
                 CreatePlanView(editingPlan: plan)
             }
+        }
+        .alert("Delete Workout?", isPresented: $showDeleteConfirmation) {
+            Button("Cancel", role: .cancel) { planToDelete = nil }
+            Button("Delete", role: .destructive) {
+                if let plan = planToDelete {
+                    modelContext.delete(plan)
+                    try? modelContext.save()
+                }
+                planToDelete = nil
+            }
+        } message: {
+            Text("This will permanently delete \"\(planToDelete?.name ?? "")\" and all its exercises. This cannot be undone.")
         }
     }
 
@@ -64,21 +78,35 @@ struct WorkoutPlanListView: View {
     // MARK: - Plan List
 
     private var planList: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                // Resume banner
-                if let incompleteSession = incompleteSessions.first {
+        List {
+            // Resume banner
+            if let incompleteSession = incompleteSessions.first {
+                Section {
                     resumeBanner(incompleteSession)
                 }
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+            }
 
-                // Plans
+            // Plans (reorderable)
+            Section {
                 ForEach(plans) { plan in
                     planRow(plan)
                 }
+                .onMove { from, to in
+                    var mutablePlans = Array(plans)
+                    PlanManagement.reorderPlans(&mutablePlans, from: from, to: to)
+                    try? modelContext.save()
+                }
+                .onDelete { offsets in
+                    if let index = offsets.first {
+                        planToDelete = plans[index]
+                        showDeleteConfirmation = true
+                    }
+                }
             }
-            .padding(.horizontal)
-            .padding(.top, 8)
         }
+        .listStyle(.insetGrouped)
     }
 
     // MARK: - Resume Banner
@@ -116,7 +144,7 @@ struct WorkoutPlanListView: View {
                     .foregroundStyle(.tertiary)
             }
             .padding(14)
-            .background(.background, in: RoundedRectangle(cornerRadius: 14))
+            .background(.orange.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
             .overlay(
                 RoundedRectangle(cornerRadius: 14)
                     .stroke(.orange.opacity(0.3), lineWidth: 1)
@@ -137,7 +165,6 @@ struct WorkoutPlanListView: View {
             .first
 
         return HStack(spacing: 14) {
-            // Plan info (tappable for detail)
             NavigationLink {
                 WorkoutPlanDetailView(plan: plan)
             } label: {
@@ -161,7 +188,6 @@ struct WorkoutPlanListView: View {
                 }
             }
 
-            // Start button
             Button {
                 startWorkout(plan: plan)
             } label: {
@@ -174,21 +200,19 @@ struct WorkoutPlanListView: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(14)
-        .background(.background, in: RoundedRectangle(cornerRadius: 14))
-        .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
-        .contextMenu {
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button(role: .destructive) {
+                planToDelete = plan
+                showDeleteConfirmation = true
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
             Button {
                 planToEdit = plan
             } label: {
                 Label("Edit", systemImage: "pencil")
             }
-            Button(role: .destructive) {
-                modelContext.delete(plan)
-                try? modelContext.save()
-            } label: {
-                Label("Delete", systemImage: "trash")
-            }
+            .tint(.blue)
         }
     }
 
