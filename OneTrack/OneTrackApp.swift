@@ -16,7 +16,9 @@ struct OneTrackApp: App {
             Ingredient.self,
             BodyMeasurement.self,
             WeightEntry.self,
-            CustomExercise.self
+            CustomExercise.self,
+            WeightGoal.self,
+            ProgressPhoto.self
         ])
         // CloudKit sync: set to .automatic when using a paid Apple Developer account.
         // With a free account, use .none to avoid provisioning errors.

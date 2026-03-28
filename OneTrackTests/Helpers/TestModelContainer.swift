@@ -8,7 +8,8 @@ func makeTestContainer() throws -> ModelContainer {
         WorkoutSession.self, ExerciseLog.self, SetLog.self,
         MealEntry.self, Ingredient.self,
         BodyMeasurement.self, WeightEntry.self,
-        CustomExercise.self
+        CustomExercise.self,
+        WeightGoal.self, ProgressPhoto.self
     ])
     let config = ModelConfiguration(isStoredInMemoryOnly: true)
     return try ModelContainer(for: schema, configurations: [config])
