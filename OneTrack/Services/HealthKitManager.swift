@@ -193,6 +193,82 @@ final class HealthKitManager {
         }
     }
 
+    // MARK: - Weekly Activity Data
+
+    /// Fetches daily step counts for the last 7 days.
+    func fetchWeeklySteps() async -> [(date: Date, steps: Int)] {
+        guard isAvailable else { return emptyWeekData(stepDefault: 0) }
+        return await fetchDailyStatistics(
+            type: HKQuantityType(.stepCount),
+            unit: .count(),
+            days: 7
+        ).map { (date: $0.date, steps: Int($0.value)) }
+    }
+
+    /// Fetches daily active calories for the last 7 days.
+    func fetchWeeklyCalories() async -> [(date: Date, calories: Double)] {
+        guard isAvailable else { return emptyWeekData(calorieDefault: 0) }
+        return await fetchDailyStatistics(
+            type: HKQuantityType(.activeEnergyBurned),
+            unit: .kilocalorie(),
+            days: 7
+        ).map { (date: $0.date, calories: $0.value) }
+    }
+
+    private func fetchDailyStatistics(type: HKQuantityType, unit: HKUnit, days: Int) async -> [(date: Date, value: Double)] {
+        let calendar = Calendar.current
+        let endDate = Date.now
+        let startDate = calendar.date(byAdding: .day, value: -(days - 1), to: calendar.startOfDay(for: endDate))!
+
+        do {
+            return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[(date: Date, value: Double)], Error>) in
+                let query = HKStatisticsCollectionQuery(
+                    quantityType: type,
+                    quantitySamplePredicate: nil,
+                    options: .cumulativeSum,
+                    anchorDate: startDate,
+                    intervalComponents: DateComponents(day: 1)
+                )
+                query.initialResultsHandler = { _, collection, error in
+                    if let error {
+                        continuation.resume(throwing: error)
+                        return
+                    }
+                    var results: [(date: Date, value: Double)] = []
+                    collection?.enumerateStatistics(from: startDate, to: endDate) { statistics, _ in
+                        let sum = statistics.sumQuantity()?.doubleValue(for: unit) ?? 0
+                        results.append((date: statistics.startDate, value: sum))
+                    }
+                    continuation.resume(returning: results)
+                }
+                healthStore.execute(query)
+            }
+        } catch {
+            return (0..<days).map { offset in
+                let day = calendar.date(byAdding: .day, value: offset, to: startDate)!
+                return (date: day, value: 0)
+            }
+        }
+    }
+
+    private func emptyWeekData(stepDefault: Int) -> [(date: Date, steps: Int)] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: .now)
+        return (0..<7).reversed().map { offset in
+            let day = calendar.date(byAdding: .day, value: -offset, to: today)!
+            return (date: day, steps: stepDefault)
+        }
+    }
+
+    private func emptyWeekData(calorieDefault: Double) -> [(date: Date, calories: Double)] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: .now)
+        return (0..<7).reversed().map { offset in
+            let day = calendar.date(byAdding: .day, value: -offset, to: today)!
+            return (date: day, calories: calorieDefault)
+        }
+    }
+
     // MARK: - Existing Fetches
 
     private func fetchTodaySteps() async -> Int {
