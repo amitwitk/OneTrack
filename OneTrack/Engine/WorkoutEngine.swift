@@ -138,6 +138,36 @@ final class WorkoutEngine {
         try? modelContext.save()
     }
 
+    // MARK: - Reorder & Swap
+
+    /// Reorders exercises within the current session. Session-scoped only.
+    func reorderExercises(from source: IndexSet, to destination: Int) {
+        guard session != nil else { return }
+        var logs = sortedLogs
+        logs.move(fromOffsets: source, toOffset: destination)
+        for (index, log) in logs.enumerated() {
+            log.sortOrder = index
+        }
+        try? modelContext.save()
+    }
+
+    /// Swaps an exercise for an alternative. Preserves sets, clears PRs.
+    func swapExercise(_ log: ExerciseLog, with template: ExerciseTemplate) {
+        // Track the original exercise name (not intermediate swaps)
+        if log.swappedFromExercise.isEmpty {
+            log.swappedFromExercise = log.exerciseName
+        }
+        log.exerciseName = template.name
+        log.isIsometric = template.isIsometric
+
+        // Clear PR flags — different exercise can't retain old PRs
+        for set in log.sets {
+            set.isPersonalRecord = false
+        }
+
+        try? modelContext.save()
+    }
+
     // MARK: - Rest Timer
 
     func startRestTimer(duration: Int? = nil) {
