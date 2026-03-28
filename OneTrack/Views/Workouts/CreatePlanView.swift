@@ -17,7 +17,7 @@ struct CreatePlanView: View {
             _planName = State(initialValue: plan.name)
             _exercises = State(initialValue: plan.exercises
                 .sorted { $0.sortOrder < $1.sortOrder }
-                .map { EditableExercise(name: $0.name, sets: $0.targetSets, reps: $0.targetReps, isIsometric: $0.isIsometric, seconds: $0.targetSeconds, restSeconds: $0.restSeconds) }
+                .map { EditableExercise(name: $0.name, sets: $0.targetSets, reps: $0.targetReps, isIsometric: $0.isIsometric, seconds: $0.targetSeconds, restSeconds: $0.restSeconds, section: $0.section) }
             )
         }
     }
@@ -197,7 +197,7 @@ struct CreatePlanView: View {
             }
             // Add new
             for (index, ex) in exercises.enumerated() {
-                let exercise = Exercise(name: ex.name, targetSets: ex.sets, targetReps: ex.reps, sortOrder: index, isIsometric: ex.isIsometric, targetSeconds: ex.seconds, restSeconds: ex.restSeconds)
+                let exercise = Exercise(name: ex.name, targetSets: ex.sets, targetReps: ex.reps, sortOrder: index, isIsometric: ex.isIsometric, targetSeconds: ex.seconds, restSeconds: ex.restSeconds, section: ex.section)
                 exercise.plan = plan
                 modelContext.insert(exercise)
             }
@@ -214,7 +214,7 @@ struct CreatePlanView: View {
             modelContext.insert(plan)
 
             for (index, ex) in exercises.enumerated() {
-                let exercise = Exercise(name: ex.name, targetSets: ex.sets, targetReps: ex.reps, sortOrder: index, isIsometric: ex.isIsometric, targetSeconds: ex.seconds, restSeconds: ex.restSeconds)
+                let exercise = Exercise(name: ex.name, targetSets: ex.sets, targetReps: ex.reps, sortOrder: index, isIsometric: ex.isIsometric, targetSeconds: ex.seconds, restSeconds: ex.restSeconds, section: ex.section)
                 exercise.plan = plan
                 modelContext.insert(exercise)
             }
@@ -236,8 +236,9 @@ struct EditableExercise: Identifiable {
     var seconds: Int
     var restSeconds: Int?
     var showRestOverride: Bool
+    var section: String
 
-    init(name: String, sets: Int, reps: Int, isIsometric: Bool = false, seconds: Int = 30, restSeconds: Int? = nil) {
+    init(name: String, sets: Int, reps: Int, isIsometric: Bool = false, seconds: Int = 30, restSeconds: Int? = nil, section: String = "") {
         self.name = name
         self.sets = sets
         self.reps = reps
@@ -245,6 +246,7 @@ struct EditableExercise: Identifiable {
         self.seconds = seconds
         self.restSeconds = restSeconds
         self.showRestOverride = restSeconds != nil
+        self.section = section
     }
 }
 

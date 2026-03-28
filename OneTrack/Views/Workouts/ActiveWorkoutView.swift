@@ -11,6 +11,7 @@ struct ActiveWorkoutView: View {
     @State private var isTimerRunning = true
     @State private var showFinishConfirmation = false
     @State private var showCancelConfirmation = false
+    @State private var showAddExercise = false
 
     // Rest timer
     @State private var restTimeRemaining: Int = 0
@@ -22,6 +23,20 @@ struct ActiveWorkoutView: View {
 
     private var sortedLogs: [ExerciseLog] {
         session.exerciseLogs.sorted { $0.sortOrder < $1.sortOrder }
+    }
+
+    private var groupedLogs: [(String, [ExerciseLog])] {
+        var result: [(String, [ExerciseLog])] = []
+        var currentSection = "\u{0}" // impossible sentinel
+        for log in sortedLogs {
+            if log.section != currentSection {
+                currentSection = log.section
+                result.append((currentSection, [log]))
+            } else {
+                result[result.count - 1].1.append(log)
+            }
+        }
+        return result
     }
 
     private var completedCount: Int {
@@ -41,20 +56,43 @@ struct ActiveWorkoutView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     headerCard
-                    ForEach(sortedLogs) { log in
-                        let exerciseRestSeconds = exerciseRestDuration(for: log)
-                        ExerciseSectionView(
-                            log: log,
-                            previousSession: previousSession,
-                            modelContext: modelContext,
-                            onSetCompleted: {
-                                startRestTimer(duration: exerciseRestSeconds)
-                            },
-                            onPRDetected: {
-                                triggerPRCelebration()
-                            }
-                        )
+                    ForEach(groupedLogs, id: \.0) { sectionName, logs in
+                        if !sectionName.isEmpty {
+                            Text(sectionName)
+                                .font(.subheadline.bold())
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.top, 4)
+                        }
+                        ForEach(logs) { log in
+                            let exerciseRestSeconds = exerciseRestDuration(for: log)
+                            ExerciseSectionView(
+                                log: log,
+                                previousSession: previousSession,
+                                modelContext: modelContext,
+                                onSetCompleted: {
+                                    startRestTimer(duration: exerciseRestSeconds)
+                                },
+                                onPRDetected: {
+                                    triggerPRCelebration()
+                                }
+                            )
+                        }
                     }
+
+                    // Add exercise mid-workout
+                    Button {
+                        showAddExercise = true
+                    } label: {
+                        Label("Add Exercise", systemImage: "plus.circle")
+                            .font(.subheadline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(.background, in: RoundedRectangle(cornerRadius: 12))
+                            .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
+                    }
+                    .buttonStyle(.plain)
+
                     Color.clear.frame(height: isResting ? 80 : 0)
                 }
                 .padding()
@@ -108,6 +146,11 @@ struct ActiveWorkoutView: View {
             Button("Keep Going", role: .cancel) {}
         } message: {
             Text("All logged sets will be lost.")
+        }
+        .sheet(isPresented: $showAddExercise) {
+            ExercisePickerView { templates in
+                addExercises(templates)
+            }
         }
         .task(id: "workout-timer") {
             while isTimerRunning && !Task.isCancelled {
@@ -231,6 +274,31 @@ struct ActiveWorkoutView: View {
     }
 
     // MARK: - Actions
+
+    private func addExercises(_ templates: [ExerciseTemplate]) {
+        let maxOrder = sortedLogs.last?.sortOrder ?? -1
+        for (index, template) in templates.enumerated() {
+            let log = ExerciseLog(
+                exerciseName: template.name,
+                sortOrder: maxOrder + 1 + index,
+                isIsometric: template.isIsometric
+            )
+            log.session = session
+            modelContext.insert(log)
+
+            for setIndex in 0..<template.defaultSets {
+                let setLog = SetLog(
+                    setNumber: setIndex + 1,
+                    reps: template.defaultReps,
+                    seconds: template.defaultSeconds,
+                    weightKg: 0
+                )
+                setLog.exerciseLog = log
+                modelContext.insert(setLog)
+            }
+        }
+        try? modelContext.save()
+    }
 
     private func startRestTimer(duration: Int? = nil) {
         restDuration = duration ?? (session.plan?.defaultRestSeconds ?? 90)

@@ -12,6 +12,7 @@ struct ParsedExercise {
     let reps: Int
     let seconds: Int
     let isIsometric: Bool
+    let section: String
 }
 
 enum PlanParseError: Error, LocalizedError {
@@ -57,6 +58,7 @@ struct WorkoutPlanParser {
         var currentName: String?
         var currentRest = 90
         var currentExercises: [ParsedExercise] = []
+        var currentSection = ""
         var lineNumber = 0
 
         func finalizePlan() throws {
@@ -77,6 +79,7 @@ struct WorkoutPlanParser {
                 currentName = nil
                 currentRest = 90
                 currentExercises = []
+                currentSection = ""
                 continue
             }
 
@@ -93,13 +96,19 @@ struct WorkoutPlanParser {
                 continue
             }
 
+            // Section header: [Section Name]
+            if trimmed.hasPrefix("[") && trimmed.hasSuffix("]") {
+                currentSection = String(trimmed.dropFirst().dropLast()).trimmingCharacters(in: .whitespaces)
+                continue
+            }
+
             if trimmed.hasPrefix("-") || trimmed.hasPrefix("•") {
                 if currentName == nil {
                     currentName = "Imported Plan"
                 }
 
                 let exerciseLine = String(trimmed.dropFirst(1)).trimmingCharacters(in: .whitespaces)
-                let exercise = try parseExercise(exerciseLine, lineNumber: lineNumber)
+                let exercise = try parseExercise(exerciseLine, lineNumber: lineNumber, section: currentSection)
                 currentExercises.append(exercise)
                 continue
             }
@@ -114,7 +123,7 @@ struct WorkoutPlanParser {
         return plans
     }
 
-    static func parseExercise(_ line: String, lineNumber: Int) throws -> ParsedExercise {
+    static func parseExercise(_ line: String, lineNumber: Int, section: String = "") throws -> ParsedExercise {
         // Format: "Exercise Name: SETSxREPS" or "Exercise Name: SETSxSECONDSs"
         guard let colonIndex = line.lastIndex(of: ":") else {
             throw PlanParseError.invalidExerciseFormat(line: line, lineNumber: lineNumber)
@@ -141,13 +150,13 @@ struct WorkoutPlanParser {
             guard let seconds = Int(secondsStr) else {
                 throw PlanParseError.invalidExerciseFormat(line: line, lineNumber: lineNumber)
             }
-            return ParsedExercise(name: name, sets: sets, reps: 0, seconds: seconds, isIsometric: true)
+            return ParsedExercise(name: name, sets: sets, reps: 0, seconds: seconds, isIsometric: true, section: section)
         } else {
             // Rep-based: "10"
             guard let reps = Int(valuePart) else {
                 throw PlanParseError.invalidExerciseFormat(line: line, lineNumber: lineNumber)
             }
-            return ParsedExercise(name: name, sets: sets, reps: reps, seconds: 0, isIsometric: false)
+            return ParsedExercise(name: name, sets: sets, reps: reps, seconds: 0, isIsometric: false, section: section)
         }
     }
 }

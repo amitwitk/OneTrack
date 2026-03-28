@@ -144,7 +144,8 @@ struct ImportPlanView: View {
                     targetReps: ex.reps,
                     sortOrder: index,
                     isIsometric: ex.isIsometric,
-                    targetSeconds: ex.seconds
+                    targetSeconds: ex.seconds,
+                    section: ex.section
                 )
                 exercise.plan = plan
                 modelContext.insert(exercise)
