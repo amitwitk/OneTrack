@@ -390,8 +390,18 @@ private struct ExerciseSectionView: View {
     let onAddSet: () -> Void
     let onDeleteSet: (SetLog) -> Void
 
+    @State private var showNotes = false
+    @State private var showHistory = false
+
     private var sortedSets: [SetLog] {
         log.sets.sorted { $0.setNumber < $1.setNumber }
+    }
+
+    private var previousSessionNotes: String? {
+        guard let previousSession else { return nil }
+        return previousSession.exerciseLogs
+            .first { $0.exerciseName == log.exerciseName }?
+            .notes
     }
 
     private var previousSets: [SetLog] {
@@ -417,13 +427,29 @@ private struct ExerciseSectionView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(log.exerciseName)
                         .font(.headline)
+                        .onLongPressGesture { showHistory = true }
                     if let e1rm = estimated1RM {
                         Text("Est. 1RM: \(String(format: "%.1f", e1rm)) kg")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    if !log.notes.isEmpty && !showNotes {
+                        Text(log.notes)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
                 Spacer()
+
+                // Notes button
+                Button { showNotes.toggle() } label: {
+                    Image(systemName: log.notes.isEmpty ? "note.text.badge.plus" : "note.text")
+                        .font(.subheadline)
+                        .foregroundStyle(log.notes.isEmpty ? Color.gray.opacity(0.4) : Color.blue)
+                }
+                .buttonStyle(.plain)
+
                 if allCompleted {
                     Image(systemName: "checkmark.seal.fill")
                         .foregroundStyle(.green)
@@ -432,7 +458,34 @@ private struct ExerciseSectionView: View {
             }
             .padding(.horizontal)
             .padding(.top, 14)
-            .padding(.bottom, 8)
+            .padding(.bottom, showNotes ? 4 : 8)
+
+            // Inline notes editor
+            if showNotes {
+                TextField("Exercise notes...", text: Binding(
+                    get: { log.notes },
+                    set: { log.notes = $0 }
+                ), axis: .vertical)
+                .font(.caption)
+                .textFieldStyle(.roundedBorder)
+                .lineLimit(1...3)
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+            }
+
+            // Previous session notes reference
+            if let prevNotes = previousSessionNotes, !prevNotes.isEmpty, !showNotes {
+                HStack(spacing: 4) {
+                    Image(systemName: "text.quote")
+                        .font(.caption2)
+                    Text(prevNotes)
+                        .font(.caption2)
+                        .lineLimit(1)
+                }
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal)
+                .padding(.bottom, 6)
+            }
 
             Divider()
                 .padding(.horizontal)
@@ -504,6 +557,9 @@ private struct ExerciseSectionView: View {
         }
         .background(.background, in: RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.06), radius: 8, y: 4)
+        .sheet(isPresented: $showHistory) {
+            ExerciseHistoryView(exerciseName: log.exerciseName)
+        }
     }
 }
 
@@ -543,7 +599,7 @@ private struct SetRowView: View {
             .frame(width: 36)
             .onLongPressGesture {
                 withAnimation(.easeInOut(duration: 0.2)) {
-                    setLog.setType = setLog.isWarmUp ? .normal : .warmUp
+                    setLog.setType = setLog.setType.next
                 }
             }
 
@@ -643,21 +699,36 @@ private struct SetRowView: View {
     }
 
     private var rowBackground: Color {
-        if setLog.isWarmUp {
-            return .gray.opacity(0.06)
+        switch setLog.setType {
+        case .warmUp: .gray.opacity(0.06)
+        case .dropSet: .orange.opacity(0.04)
+        case .toFailure: .red.opacity(0.04)
+        case .normal: setLog.isCompleted ? .green.opacity(0.04) : .clear
         }
-        return setLog.isCompleted ? .green.opacity(0.04) : .clear
     }
 
     @ViewBuilder
     private var setBadge: some View {
-        if setLog.isWarmUp {
+        switch setLog.setType {
+        case .warmUp:
             Text("W")
                 .font(.caption.bold())
                 .foregroundStyle(.white)
                 .frame(width: 24, height: 24)
                 .background(.gray.opacity(0.5), in: Circle())
-        } else {
+        case .dropSet:
+            Text("D")
+                .font(.caption.bold())
+                .foregroundStyle(.white)
+                .frame(width: 24, height: 24)
+                .background(.orange, in: Circle())
+        case .toFailure:
+            Text("F")
+                .font(.caption.bold())
+                .foregroundStyle(.white)
+                .frame(width: 24, height: 24)
+                .background(.red, in: Circle())
+        case .normal:
             Text("\(setLog.setNumber)")
                 .font(.caption.bold())
                 .foregroundStyle(.white)
@@ -667,7 +738,9 @@ private struct SetRowView: View {
     }
 
     private func checkForPR() {
-        // Fetch all completed sessions' exercise logs for this exercise name
+        // Drop sets and warm-ups are excluded from PR detection
+        guard !setLog.setType.isPRExcluded else { return }
+
         let name = exerciseName
         var descriptor = FetchDescriptor<WorkoutSession>(
             predicate: #Predicate { $0.isCompleted }
@@ -680,7 +753,7 @@ private struct SetRowView: View {
             .flatMap(\.exerciseLogs)
             .filter { $0.exerciseName == name }
             .flatMap(\.sets)
-            .filter { $0.isCompleted }
+            .filter { $0.isCompleted && !$0.setType.isPRExcluded }
 
         let isPR = WorkoutCalculations.isPersonalRecord(
             setLog: setLog,

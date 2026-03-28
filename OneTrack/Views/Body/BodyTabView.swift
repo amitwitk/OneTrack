@@ -13,11 +13,10 @@ struct BodyTabView: View {
 
     @State private var healthKitManager = HealthKitManager()
 
-    // Weight entry
+    // Weight entry — defaults loaded from last entry
     @State private var weightValue: Double = 75.0
-    @State private var weightSource: String = "manual"
 
-    // Measurement entry
+    // Measurement entry — defaults loaded from last entry
     @State private var waistValue: Double = 80.0
     @State private var chestValue: Double = 95.0
     @State private var leftBicepValue: Double = 32.0
@@ -33,9 +32,11 @@ struct BodyTabView: View {
 
     // HealthKit
     @State private var showHealthKitDenied = false
-    @State private var isSyncing = false
-    @State private var syncCount = 0
-    @State private var showSyncResult = false
+
+    // Collapsible sections
+    @State private var showRecentWeights = false
+    @State private var showRecentMeasurements = false
+    @State private var hasLoadedDefaults = false
 
     private var currentWeight: Double? {
         BodyCalculations.currentWeight(entries: weightEntries)
@@ -59,6 +60,7 @@ struct BodyTabView: View {
                 VStack(spacing: 20) {
                     statsGrid
                     weightChartSection
+                    measurementChartSection
                     logWeightSection
                     logMeasurementsSection
                     recentWeightsSection
@@ -72,6 +74,7 @@ struct BodyTabView: View {
         }
         .task {
             await initialSync()
+            loadDefaults()
         }
         .onDisappear {
             healthKitManager.stopObservingWeightChanges()
@@ -80,13 +83,6 @@ struct BodyTabView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text("Please enable Health access in Settings > Privacy > Health > OneTrack.")
-        }
-        .alert("Sync Complete", isPresented: $showSyncResult) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(syncCount > 0
-                 ? "Imported \(syncCount) weight \(syncCount == 1 ? "entry" : "entries") from Health."
-                 : "All weight entries are already up to date.")
         }
     }
 
@@ -100,21 +96,18 @@ struct BodyTabView: View {
                 icon: "scalemass.fill",
                 color: .blue
             )
-
             StatCard(
                 title: "Weekly Change",
                 value: BodyCalculations.weeklyChangeFormatted(weeklyChange),
                 icon: "arrow.up.arrow.down",
                 color: .purple
             )
-
             StatCard(
                 title: "Latest Waist",
                 value: latestWaist.map { String(format: "%.1f cm", $0) } ?? "--",
                 icon: "ruler.fill",
                 color: .orange
             )
-
             StatCard(
                 title: "Entries",
                 value: "\(entriesThisMonth)",
@@ -141,10 +134,7 @@ struct BodyTabView: View {
             .pickerStyle(.segmented)
             .padding(.horizontal)
 
-            let chartData = BodyCalculations.filteredEntries(
-                entries: weightEntries,
-                days: chartRange.days
-            )
+            let chartData = BodyCalculations.filteredEntries(entries: weightEntries, days: chartRange.days)
 
             if chartData.isEmpty {
                 VStack(spacing: 12) {
@@ -154,9 +144,6 @@ struct BodyTabView: View {
                     Text("No weight data yet")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    Text("Log your first weight entry below")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 32)
@@ -193,7 +180,49 @@ struct BodyTabView: View {
         return minW...maxW
     }
 
-    // MARK: - Log Weight
+    // MARK: - Measurement Progress Chart
+
+    private var measurementChartSection: some View {
+        let chartData = BodyCalculations.measurementChartData(measurements: measurements)
+
+        return Group {
+            if !chartData.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Measurement Trends")
+                        .font(.headline)
+                        .padding(.horizontal)
+
+                    Chart(chartData) { point in
+                        LineMark(
+                            x: .value("Date", point.date),
+                            y: .value("cm", point.value)
+                        )
+                        .foregroundStyle(by: .value("Type", point.type))
+                        .interpolationMethod(.catmullRom)
+
+                        PointMark(
+                            x: .value("Date", point.date),
+                            y: .value("cm", point.value)
+                        )
+                        .foregroundStyle(by: .value("Type", point.type))
+                        .symbolSize(20)
+                    }
+                    .chartForegroundStyleScale([
+                        "Waist": Color.blue,
+                        "Chest": Color.green,
+                        "L. Bicep": Color.orange,
+                        "R. Bicep": Color.purple
+                    ])
+                    .chartLegend(.visible)
+                    .frame(height: 180)
+                    .cardStyle()
+                    .padding(.horizontal)
+                }
+            }
+        }
+    }
+
+    // MARK: - Log Weight (sync button removed)
 
     private var logWeightSection: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -214,41 +243,17 @@ struct BodyTabView: View {
                     )
                 }
 
-                HStack(spacing: 12) {
-                    Button {
-                        saveWeight()
-                    } label: {
-                        Label("Save", systemImage: "checkmark.circle.fill")
-                            .font(.subheadline.bold())
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .foregroundStyle(.white)
-                            .background(.blue, in: RoundedRectangle(cornerRadius: 12))
-                    }
-                    .buttonStyle(.plain)
-
-                    if healthKitManager.isAvailable {
-                        Button {
-                            Task { await importFromHealthKit() }
-                        } label: {
-                            Group {
-                                if isSyncing {
-                                    ProgressView()
-                                        .tint(.white)
-                                } else {
-                                    Label("Sync from Health", systemImage: "heart.fill")
-                                }
-                            }
-                            .font(.subheadline.bold())
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .foregroundStyle(.white)
-                            .background(.pink, in: RoundedRectangle(cornerRadius: 12))
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(isSyncing)
-                    }
+                Button {
+                    saveWeight()
+                } label: {
+                    Label("Save", systemImage: "checkmark.circle.fill")
+                        .font(.subheadline.bold())
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .foregroundStyle(.white)
+                        .background(.blue, in: RoundedRectangle(cornerRadius: 12))
                 }
+                .buttonStyle(.plain)
             }
             .cardStyle()
             .padding(.horizontal)
@@ -313,40 +318,29 @@ struct BodyTabView: View {
         }
     }
 
-    // MARK: - Recent Weights
+    // MARK: - Recent Weights (collapsible)
 
     private var recentWeightsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Recent Weights")
-                .font(.headline)
-                .padding(.horizontal)
+            if !weightEntries.isEmpty {
+                DisclosureGroup(
+                    isExpanded: $showRecentWeights
+                ) {
+                    VStack(spacing: 0) {
+                        ForEach(Array(weightEntries.prefix(10).enumerated()), id: \.element.id) { index, entry in
+                            weightRow(entry)
 
-            if weightEntries.isEmpty {
-                VStack(spacing: 12) {
-                    Image(systemName: "scalemass")
-                        .font(.largeTitle)
-                        .foregroundStyle(.tertiary)
-                    Text("No weight entries yet")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 32)
-                .cardStyle()
-                .padding(.horizontal)
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(weightEntries.prefix(10).enumerated()), id: \.element.id) { index, entry in
-                        weightRow(entry)
-
-                        if index < min(weightEntries.count, 10) - 1 {
-                            Divider()
-                                .padding(.horizontal)
+                            if index < min(weightEntries.count, 10) - 1 {
+                                Divider()
+                                    .padding(.horizontal)
+                            }
                         }
                     }
+                } label: {
+                    Text("Recent Weights (\(weightEntries.count))")
+                        .font(.headline)
                 }
-                .background(.background, in: RoundedRectangle(cornerRadius: 16))
-                .shadow(color: .black.opacity(0.06), radius: 8, y: 4)
+                .cardStyle()
                 .padding(.horizontal)
             }
         }
@@ -377,40 +371,29 @@ struct BodyTabView: View {
         .padding(.vertical, 10)
     }
 
-    // MARK: - Recent Measurements
+    // MARK: - Recent Measurements (collapsible)
 
     private var recentMeasurementsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Recent Measurements")
-                .font(.headline)
-                .padding(.horizontal)
+            if !measurements.isEmpty {
+                DisclosureGroup(
+                    isExpanded: $showRecentMeasurements
+                ) {
+                    VStack(spacing: 0) {
+                        ForEach(Array(measurements.prefix(10).enumerated()), id: \.element.id) { index, measurement in
+                            measurementRow(measurement)
 
-            if measurements.isEmpty {
-                VStack(spacing: 12) {
-                    Image(systemName: "ruler")
-                        .font(.largeTitle)
-                        .foregroundStyle(.tertiary)
-                    Text("No measurements yet")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 32)
-                .cardStyle()
-                .padding(.horizontal)
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(measurements.prefix(10).enumerated()), id: \.element.id) { index, measurement in
-                        measurementRow(measurement)
-
-                        if index < min(measurements.count, 10) - 1 {
-                            Divider()
-                                .padding(.horizontal)
+                            if index < min(measurements.count, 10) - 1 {
+                                Divider()
+                                    .padding(.horizontal)
+                            }
                         }
                     }
+                } label: {
+                    Text("Recent Measurements (\(measurements.count))")
+                        .font(.headline)
                 }
-                .background(.background, in: RoundedRectangle(cornerRadius: 16))
-                .shadow(color: .black.opacity(0.06), radius: 8, y: 4)
+                .cardStyle()
                 .padding(.horizontal)
             }
         }
@@ -452,19 +435,33 @@ struct BodyTabView: View {
 
     // MARK: - Actions
 
+    private func loadDefaults() {
+        guard !hasLoadedDefaults else { return }
+        hasLoadedDefaults = true
+
+        // Weight default from last entry
+        if let lastWeight = weightEntries.first?.weightKg {
+            weightValue = (lastWeight * 10).rounded() / 10
+        }
+
+        // Measurement defaults from last entries
+        let latest = BodyCalculations.latestMeasurementValues(measurements: measurements)
+        if let w = latest.waist { waistValue = w }
+        if let c = latest.chest { chestValue = c }
+        if let lb = latest.leftBicep { leftBicepValue = lb }
+        if let rb = latest.rightBicep { rightBicepValue = rb }
+    }
+
     private func saveWeight() {
-        let entry = WeightEntry(date: .now, weightKg: weightValue, source: weightSource)
+        let entry = WeightEntry(date: .now, weightKg: weightValue, source: "manual")
         modelContext.insert(entry)
         try? modelContext.save()
 
-        // Write manual entries to HealthKit if authorized
-        if weightSource == "manual" && healthKitManager.isAuthorized {
+        if healthKitManager.isAuthorized {
             Task {
                 try? await healthKitManager.saveWeight(weightKg: weightValue)
             }
         }
-
-        weightSource = "manual"
     }
 
     private func initialSync() async {
@@ -487,44 +484,6 @@ struct BodyTabView: View {
         healthKitManager.startObservingWeightChanges()
     }
 
-    private func importFromHealthKit() async {
-        if !healthKitManager.isAuthorized {
-            await healthKitManager.requestAuthorization()
-        }
-
-        guard healthKitManager.isAuthorized else {
-            showHealthKitDenied = true
-            return
-        }
-
-        isSyncing = true
-
-        // Full historical import
-        let allSamples = await healthKitManager.fetchAllWeightHistory()
-        let toImport = BodyCalculations.samplesToImport(
-            samples: allSamples,
-            existingEntries: weightEntries
-        )
-
-        for sample in toImport {
-            let values = BodyCalculations.weightEntryValues(from: sample)
-            let entry = WeightEntry(date: values.date, weightKg: values.weightKg, source: values.source)
-            modelContext.insert(entry)
-        }
-        try? modelContext.save()
-
-        syncCount = toImport.count
-        isSyncing = false
-        showSyncResult = true
-
-        // Also update latest weight display
-        await healthKitManager.fetchAll()
-        if let hkWeight = healthKitManager.latestWeight {
-            weightValue = (hkWeight * 10).rounded() / 10
-        }
-    }
-
-    /// Imports a batch of WeightSamples into SwiftData after deduplication.
     private func importSamples(_ samples: [WeightSample]) {
         let toImport = BodyCalculations.samplesToImport(
             samples: samples,
@@ -550,7 +509,6 @@ struct BodyTabView: View {
         modelContext.insert(m)
         try? modelContext.save()
 
-        // Reset toggles
         logWaist = false
         logChest = false
         logLeftBicep = false
