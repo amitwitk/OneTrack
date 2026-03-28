@@ -69,14 +69,15 @@ final class WorkoutEngine {
         try? modelContext.save()
     }
 
-    /// Cancels and deletes the workout session.
-    func cancelWorkout() {
-        guard let session else { return }
+    /// Cancels the workout: stops timers and marks for deletion.
+    /// Returns the session so the caller can delete it after dismissing the view.
+    @discardableResult
+    func cancelWorkout() -> WorkoutSession? {
+        let sessionToDelete = session
         stopTimers()
-        modelContext.delete(session)
-        try? modelContext.save()
         self.session = nil
         isActive = false
+        return sessionToDelete
     }
 
     /// Prepares finish (stops timers, sets duration) without marking complete.

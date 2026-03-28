@@ -107,13 +107,14 @@ struct WorkoutEngineTests {
         #expect(session.durationSeconds != nil)
     }
 
-    @Test func cancelWorkout_deletesSession() throws {
+    @Test func cancelWorkout_returnsSessionForDeletion() throws {
         let (engine, context) = try makeEngine()
         let session = makeSessionWithLogs(context: context)
         engine.resumeSession(session, previous: nil)
-        engine.cancelWorkout()
+        let returned = engine.cancelWorkout()
         #expect(engine.session == nil)
         #expect(!engine.isActive)
+        #expect(returned === session)
     }
 
     // MARK: - Rest Timer
