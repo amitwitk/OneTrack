@@ -164,4 +164,65 @@ struct ModelTests {
         #expect(measurement.leftBicepCm == nil)
         #expect(measurement.rightBicepCm == nil)
     }
+
+    // MARK: - SetType Tests
+
+    @Test func setLog_defaultSetType_isNormal() {
+        let setLog = SetLog(setNumber: 1, reps: 10, weightKg: 80)
+        #expect(setLog.setType == .normal)
+        #expect(setLog.isWarmUp == false)
+    }
+
+    @Test func setLog_warmUpSetType() {
+        let setLog = SetLog(setNumber: 1, reps: 10, weightKg: 40, setType: .warmUp)
+        #expect(setLog.setType == .warmUp)
+        #expect(setLog.isWarmUp == true)
+    }
+
+    @Test func setLog_setTypeCycling() {
+        let setLog = SetLog(setNumber: 1, reps: 10, weightKg: 60)
+        #expect(setLog.setType == .normal)
+
+        setLog.setType = .warmUp
+        #expect(setLog.setType == .warmUp)
+        #expect(setLog.setTypeRaw == "warmUp")
+
+        setLog.setType = .dropSet
+        #expect(setLog.setType == .dropSet)
+
+        setLog.setType = .toFailure
+        #expect(setLog.setType == .toFailure)
+
+        setLog.setType = .normal
+        #expect(setLog.setType == .normal)
+    }
+
+    @Test func setLog_allSetTypes() {
+        let allTypes: [SetType] = [.normal, .warmUp, .dropSet, .toFailure]
+        #expect(SetType.allCases.count == 4)
+        for setType in allTypes {
+            let setLog = SetLog(setNumber: 1, setType: setType)
+            #expect(setLog.setType == setType)
+        }
+    }
+
+    // MARK: - RPE Tests
+
+    @Test func workoutSession_rpeDefaultsToNil() {
+        let session = WorkoutSession()
+        #expect(session.rpe == nil)
+    }
+
+    @Test func workoutSession_rpeCanBeSet() throws {
+        let container = try makeTestContainer()
+        let context = container.mainContext
+
+        let session = WorkoutSession()
+        session.rpe = 8
+        context.insert(session)
+        try context.save()
+
+        let fetched = try context.fetch(FetchDescriptor<WorkoutSession>())
+        #expect(fetched.first?.rpe == 8)
+    }
 }

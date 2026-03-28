@@ -12,7 +12,7 @@ struct DashboardCalculations {
             .filter { $0.date >= weekAgo }
             .flatMap(\.exerciseLogs)
             .flatMap(\.sets)
-            .filter(\.isCompleted)
+            .filter { $0.isCompleted && !$0.isWarmUp }
             .reduce(0.0) { $0 + Double($1.reps) * $1.weightKg }
         if volume >= 1000 {
             return String(format: "%.1fk", volume / 1000)

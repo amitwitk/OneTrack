@@ -15,14 +15,25 @@ struct WorkoutSessionDetailView: View {
                 if let duration = session.durationSeconds {
                     LabeledContent("Duration", value: duration.durationString)
                 }
+                if let rpe = session.rpe {
+                    LabeledContent("RPE", value: "\(rpe)/10")
+                }
             }
 
             ForEach(sortedLogs) { log in
                 Section(log.exerciseName) {
                     ForEach(log.sets.sorted { $0.setNumber < $1.setNumber }) { setLog in
                         HStack {
-                            Text("Set \(setLog.setNumber)")
-                                .font(.subheadline)
+                            if setLog.isWarmUp {
+                                Text("W")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(.white)
+                                    .frame(width: 22, height: 22)
+                                    .background(.gray.opacity(0.5), in: Circle())
+                            } else {
+                                Text("Set \(setLog.setNumber)")
+                                    .font(.subheadline)
+                            }
                             if setLog.isPersonalRecord {
                                 Image(systemName: "trophy.fill")
                                     .font(.caption)

@@ -117,6 +117,36 @@ struct DashboardCalculationsTests {
         #expect(result == "200")
     }
 
+    @Test func totalVolume_excludesWarmUpSets() throws {
+        let container = try makeTestContainer()
+        let context = container.mainContext
+
+        let session = WorkoutSession()
+        session.isCompleted = true
+        context.insert(session)
+
+        let log = ExerciseLog(exerciseName: "Bench", sortOrder: 0)
+        log.session = session
+        context.insert(log)
+
+        // Working set: 10 reps x 100kg = 1000
+        let workingSet = SetLog(setNumber: 1, reps: 10, weightKg: 100)
+        workingSet.isCompleted = true
+        workingSet.exerciseLog = log
+        context.insert(workingSet)
+
+        // Warm-up set: 10 reps x 50kg = 500 (should be excluded)
+        let warmUpSet = SetLog(setNumber: 2, reps: 10, weightKg: 50, setType: .warmUp)
+        warmUpSet.isCompleted = true
+        warmUpSet.exerciseLog = log
+        context.insert(warmUpSet)
+
+        try context.save()
+
+        let result = DashboardCalculations.totalVolume(sessions: [session])
+        #expect(result == "1.0k")
+    }
+
     @Test func greeting_morning() {
         var components = Calendar.current.dateComponents(in: .current, from: .now)
         components.hour = 8
