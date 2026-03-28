@@ -60,11 +60,22 @@ struct WorkoutSessionDetailView: View {
                     Button {
                         exerciseForHistory = log.exerciseName
                     } label: {
-                        HStack {
-                            Text(log.exerciseName)
-                            Image(systemName: "chart.xyaxis.line")
-                                .font(.caption2)
-                                .foregroundStyle(.blue)
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack {
+                                Text(log.exerciseName)
+                                Image(systemName: "chart.xyaxis.line")
+                                    .font(.caption2)
+                                    .foregroundStyle(.blue)
+                            }
+                            if !log.swappedFromExercise.isEmpty {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "arrow.triangle.swap")
+                                        .font(.caption2)
+                                    Text("from \(log.swappedFromExercise)")
+                                        .font(.caption2)
+                                }
+                                .foregroundStyle(.orange)
+                            }
                         }
                     }
                 }

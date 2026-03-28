@@ -7,6 +7,7 @@ final class ExerciseLog {
     var isIsometric: Bool = false
     var section: String = ""
     var notes: String = ""
+    var swappedFromExercise: String = ""
     var sortOrder: Int = 0
     var session: WorkoutSession?
     @Relationship(deleteRule: .cascade, inverse: \SetLog.exerciseLog)

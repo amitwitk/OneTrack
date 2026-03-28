@@ -16,6 +16,11 @@ struct ActiveWorkoutView: View {
     // PR celebration (UI-only)
     @State private var showConfetti = false
 
+    // Exercise swap & reorder
+    @State private var exerciseToSwap: ExerciseLog?
+    @State private var showSwapPicker = false
+    @State private var showReorderSheet = false
+
     // Convenience accessors delegating to engine
     private var sortedLogs: [ExerciseLog] { engine?.sortedLogs ?? [] }
     private var completedCount: Int { engine?.completedCount ?? 0 }
@@ -66,7 +71,11 @@ struct ActiveWorkoutView: View {
                                     triggerPRCelebration()
                                 },
                                 onAddSet: { addSet(to: log) },
-                                onDeleteSet: { setLog in deleteSet(setLog, from: log) }
+                                onDeleteSet: { setLog in deleteSet(setLog, from: log) },
+                                onSwapExercise: {
+                                    exerciseToSwap = log
+                                    showSwapPicker = true
+                                }
                             )
                         }
                     }
@@ -116,15 +125,24 @@ struct ActiveWorkoutView: View {
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    showFinishConfirmation = true
-                } label: {
-                    Text("Finish")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 6)
-                        .background(.green, in: Capsule())
+                HStack(spacing: 12) {
+                    Button {
+                        showReorderSheet = true
+                    } label: {
+                        Image(systemName: "arrow.up.arrow.down")
+                            .font(.subheadline)
+                    }
+
+                    Button {
+                        showFinishConfirmation = true
+                    } label: {
+                        Text("Finish")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 6)
+                            .background(.green, in: Capsule())
+                    }
                 }
             }
         }
@@ -151,6 +169,43 @@ struct ActiveWorkoutView: View {
             ExercisePickerView { templates in
                 addExercises(templates)
             }
+        }
+        .sheet(isPresented: $showSwapPicker) {
+            ExercisePickerView { templates in
+                if let template = templates.first, let log = exerciseToSwap {
+                    engine?.swapExercise(log, with: template)
+                }
+                exerciseToSwap = nil
+            }
+        }
+        .sheet(isPresented: $showReorderSheet) {
+            NavigationStack {
+                List {
+                    ForEach(sortedLogs) { log in
+                        HStack {
+                            if !log.swappedFromExercise.isEmpty {
+                                Image(systemName: "arrow.triangle.swap")
+                                    .font(.caption2)
+                                    .foregroundStyle(.orange)
+                            }
+                            Text(log.exerciseName)
+                                .font(.subheadline)
+                        }
+                    }
+                    .onMove { from, to in
+                        engine?.reorderExercises(from: from, to: to)
+                    }
+                }
+                .environment(\.editMode, .constant(.active))
+                .navigationTitle("Reorder Exercises")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Done") { showReorderSheet = false }
+                    }
+                }
+            }
+            .presentationDetents([.medium])
         }
         .onAppear {
             if engine == nil {
@@ -328,6 +383,7 @@ private struct ExerciseSectionView: View {
     let onPRDetected: () -> Void
     let onAddSet: () -> Void
     let onDeleteSet: (SetLog) -> Void
+    let onSwapExercise: () -> Void
 
     @State private var showNotes = false
     @State private var showHistory = false
@@ -367,6 +423,27 @@ private struct ExerciseSectionView: View {
                     Text(log.exerciseName)
                         .font(.headline)
                         .onLongPressGesture { showHistory = true }
+                        .contextMenu {
+                            Button {
+                                onSwapExercise()
+                            } label: {
+                                Label("Swap Exercise", systemImage: "arrow.triangle.swap")
+                            }
+                            Button {
+                                showHistory = true
+                            } label: {
+                                Label("View History", systemImage: "chart.xyaxis.line")
+                            }
+                        }
+                    if !log.swappedFromExercise.isEmpty {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.triangle.swap")
+                                .font(.caption2)
+                            Text("from \(log.swappedFromExercise)")
+                                .font(.caption2)
+                        }
+                        .foregroundStyle(.orange)
+                    }
                     if let e1rm = estimated1RM {
                         Text("Est. 1RM: \(String(format: "%.1f", e1rm)) kg")
                             .font(.caption)
