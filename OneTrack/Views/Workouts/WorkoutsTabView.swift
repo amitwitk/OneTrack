@@ -5,6 +5,7 @@ struct WorkoutsTabView: View {
     @State private var showingHistory = false
     @State private var showingCreatePlan = false
     @State private var showingImport = false
+    @State private var showingExportImport = false
 
     var body: some View {
         NavigationStack {
@@ -27,6 +28,14 @@ struct WorkoutsTabView: View {
                                 showingImport = true
                             } label: {
                                 Label("Import from Text", systemImage: "doc.text")
+                            }
+
+                            Divider()
+
+                            Button {
+                                showingExportImport = true
+                            } label: {
+                                Label("Export / Import Data", systemImage: "arrow.up.arrow.down.circle")
                             }
                         } label: {
                             Image(systemName: "plus")
@@ -52,6 +61,11 @@ struct WorkoutsTabView: View {
                 .sheet(isPresented: $showingImport) {
                     NavigationStack {
                         ImportPlanView()
+                    }
+                }
+                .sheet(isPresented: $showingExportImport) {
+                    NavigationStack {
+                        ExportImportView()
                     }
                 }
         }
