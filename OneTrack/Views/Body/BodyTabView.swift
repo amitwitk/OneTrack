@@ -11,9 +11,14 @@ struct BodyTabView: View {
     @Query(sort: \BodyMeasurement.date, order: .reverse)
     private var measurements: [BodyMeasurement]
 
+    @Query(filter: #Predicate<WeightGoal> { $0.isActive })
+    private var activeGoals: [WeightGoal]
+
     @State private var healthKitManager = HealthKitManager()
     @AppStorage("userHeightCm") private var heightCm: Double = 170.0
     @State private var showHeightSetting = false
+    @State private var showSetGoal = false
+    @State private var goalTarget: Double = 70.0
 
     // Weight entry — defaults loaded from last entry
     @State private var weightValue: Double = 75.0
@@ -71,10 +76,12 @@ struct BodyTabView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     statsGrid
+                    goalSection
                     weightChartSection
                     measurementChartSection
                     logWeightSection
                     logMeasurementsSection
+                    photosLink
                     recentWeightsSection
                     recentMeasurementsSection
                 }
@@ -186,6 +193,142 @@ struct BodyTabView: View {
             )
         }
         .padding(.horizontal)
+    }
+
+    // MARK: - Weight Goal
+
+    private var goalSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let goal = activeGoals.first {
+                let progress = BodyCalculations.goalProgress(
+                    current: currentWeight ?? goal.startWeightKg,
+                    start: goal.startWeightKg,
+                    target: goal.targetWeightKg
+                )
+                let isLosing = goal.targetWeightKg < goal.startWeightKg
+
+                VStack(spacing: 12) {
+                    HStack {
+                        Text("Weight Goal")
+                            .font(.subheadline.bold())
+                        Spacer()
+                        Menu {
+                            Button("Edit Goal") { showSetGoal = true }
+                            Button("Clear Goal", role: .destructive) {
+                                goal.isActive = false
+                                try? modelContext.save()
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    // Progress bar
+                    VStack(spacing: 4) {
+                        ProgressView(value: progress)
+                            .tint(progress >= 1.0 ? Color.green : Color.blue)
+                        HStack {
+                            Text(String(format: "%.1f kg", goal.startWeightKg))
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                            Spacer()
+                            Text(String(format: "%.0f%%", progress * 100))
+                                .font(.caption.bold())
+                                .foregroundStyle(progress >= 1.0 ? .green : .blue)
+                            Spacer()
+                            Text(String(format: "%.1f kg", goal.targetWeightKg))
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+
+                    // Estimated date
+                    if let rate = weeklyRate, let estimatedDate = BodyCalculations.estimatedGoalDate(
+                        current: currentWeight ?? goal.startWeightKg,
+                        target: goal.targetWeightKg,
+                        weeklyRate: rate
+                    ) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "calendar")
+                                .font(.caption2)
+                            Text("Est. \(estimatedDate.shortDate)")
+                                .font(.caption)
+                        }
+                        .foregroundStyle(.secondary)
+                    } else if progress < 1.0 {
+                        Text("Log more weight entries for an estimate")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+
+                    if progress >= 1.0 {
+                        Label("Goal reached!", systemImage: "trophy.fill")
+                            .font(.subheadline.bold())
+                            .foregroundStyle(.yellow)
+                    }
+                }
+                .cardStyle()
+                .padding(.horizontal)
+            } else {
+                Button {
+                    goalTarget = currentWeight ?? 70
+                    showSetGoal = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "target")
+                            .font(.subheadline)
+                        Text("Set Weight Goal")
+                            .font(.subheadline.bold())
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .foregroundStyle(.blue)
+                    .background(.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal)
+            }
+        }
+        .sheet(isPresented: $showSetGoal) {
+            NavigationStack {
+                SetGoalView(
+                    currentWeight: currentWeight ?? 75,
+                    existingGoal: activeGoals.first
+                )
+            }
+        }
+    }
+
+    // MARK: - Photos Link
+
+    private var photosLink: some View {
+        NavigationLink {
+            ProgressPhotosView()
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "camera.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(.purple)
+                    .frame(width: 36, height: 36)
+                    .background(.purple.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Progress Photos")
+                        .font(.subheadline.bold())
+                    Text("Track your visual progress")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .cardStyle()
+            .padding(.horizontal)
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Weight Chart
@@ -657,6 +800,101 @@ enum ChartRange: String, CaseIterable, Identifiable {
         case .ninetyDays: 90
         case .oneYear: 365
         }
+    }
+}
+
+// MARK: - Set Goal View
+
+struct SetGoalView: View {
+    let currentWeight: Double
+    var existingGoal: WeightGoal?
+
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+    @State private var targetWeight: Double
+    @State private var useTargetDate = false
+    @State private var targetDate = Calendar.current.date(byAdding: .month, value: 3, to: .now) ?? .now
+
+    init(currentWeight: Double, existingGoal: WeightGoal? = nil) {
+        self.currentWeight = currentWeight
+        self.existingGoal = existingGoal
+        _targetWeight = State(initialValue: existingGoal?.targetWeightKg ?? currentWeight)
+        if let existing = existingGoal, let date = existing.targetDate {
+            _useTargetDate = State(initialValue: true)
+            _targetDate = State(initialValue: date)
+        }
+    }
+
+    var body: some View {
+        Form {
+            Section("Target") {
+                HStack {
+                    Text("Target Weight")
+                    Spacer()
+                    TappableStepperInput(
+                        value: $targetWeight,
+                        step: 0.5,
+                        range: 30...200,
+                        decimals: true,
+                        minWidth: 56,
+                        buttonSize: 30,
+                        buttonHeight: 30,
+                        spacing: 2,
+                        cornerRadius: 6
+                    )
+                }
+
+                HStack {
+                    Text("Current Weight")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(String(format: "%.1f kg", currentWeight))
+                        .foregroundStyle(.secondary)
+                }
+
+                let direction = targetWeight < currentWeight ? "lose" : targetWeight > currentWeight ? "gain" : "maintain"
+                let diff = abs(targetWeight - currentWeight)
+                if diff > 0.1 {
+                    Text("Goal: \(direction) \(String(format: "%.1f", diff)) kg")
+                        .font(.caption)
+                        .foregroundStyle(.blue)
+                }
+            }
+
+            Section {
+                Toggle("Set Target Date", isOn: $useTargetDate)
+                if useTargetDate {
+                    DatePicker("Target Date", selection: $targetDate, displayedComponents: .date)
+                }
+            }
+        }
+        .navigationTitle(existingGoal != nil ? "Edit Goal" : "Set Goal")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Cancel") { dismiss() }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Save") { save() }
+                    .bold()
+            }
+        }
+    }
+
+    private func save() {
+        if let existing = existingGoal {
+            existing.targetWeightKg = targetWeight
+            existing.targetDate = useTargetDate ? targetDate : nil
+        } else {
+            let goal = WeightGoal(
+                targetWeightKg: targetWeight,
+                startWeightKg: currentWeight,
+                targetDate: useTargetDate ? targetDate : nil
+            )
+            modelContext.insert(goal)
+        }
+        try? modelContext.save()
+        dismiss()
     }
 }
 

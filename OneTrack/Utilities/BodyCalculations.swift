@@ -168,6 +168,39 @@ struct BodyCalculations {
         return String(format: "%@%.1f kg/wk", sign, rate)
     }
 
+    // MARK: - Weight Goal
+
+    /// Progress toward a weight goal (0.0 to 1.0).
+    /// Works for both loss (target < start) and gain (target > start).
+    static func goalProgress(current: Double, start: Double, target: Double) -> Double {
+        let totalChange = abs(target - start)
+        guard totalChange > 0 else { return 1.0 }
+        let actualChange = abs(current - start)
+        // Check direction: are we moving toward or away from goal?
+        let isCorrectDirection: Bool
+        if target < start { // losing
+            isCorrectDirection = current <= start
+        } else { // gaining
+            isCorrectDirection = current >= start
+        }
+        guard isCorrectDirection else { return 0 }
+        return min(actualChange / totalChange, 1.0)
+    }
+
+    /// Estimated date to reach goal based on weekly rate of change.
+    /// Returns nil if rate is zero, wrong direction, or already past goal.
+    static func estimatedGoalDate(current: Double, target: Double, weeklyRate: Double, now: Date = .now) -> Date? {
+        let remaining = target - current
+        // Check if already at or past goal
+        if abs(remaining) < 0.1 { return now }
+        // Rate must be moving toward the goal
+        guard weeklyRate != 0 else { return nil }
+        let weeksNeeded = remaining / weeklyRate
+        guard weeksNeeded > 0 else { return nil } // wrong direction
+        let daysNeeded = Int(weeksNeeded * 7)
+        return Calendar.current.date(byAdding: .day, value: daysNeeded, to: now)
+    }
+
     /// Returns the latest values for each measurement type, used for smart defaults.
     static func latestMeasurementValues(measurements: [BodyMeasurement]) -> (waist: Double?, chest: Double?, leftBicep: Double?, rightBicep: Double?) {
         let sorted = measurements.sorted { $0.date > $1.date }
