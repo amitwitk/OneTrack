@@ -68,6 +68,7 @@ struct BodyTabView: View {
                 }
                 .padding(.vertical)
             }
+            .scrollDismissesKeyboard(.interactively)
             .background(Color(.systemGroupedBackground))
             .navigationTitle("Body")
         }
@@ -545,6 +546,9 @@ private struct BodyStepperInput: View {
     let range: ClosedRange<Double>
     let format: String
 
+    @FocusState private var isEditing: Bool
+    @State private var textValue = ""
+
     var body: some View {
         HStack(spacing: 4) {
             Button {
@@ -557,10 +561,28 @@ private struct BodyStepperInput: View {
             }
             .buttonStyle(.plain)
 
-            Text(String(format: format, value))
-                .font(.subheadline.monospacedDigit().bold())
-                .frame(minWidth: 70)
-                .multilineTextAlignment(.center)
+            if isEditing {
+                TextField("", text: $textValue)
+                    .keyboardType(.decimalPad)
+                    .font(.subheadline.monospacedDigit().bold())
+                    .multilineTextAlignment(.center)
+                    .frame(minWidth: 70)
+                    .focused($isEditing)
+                    .onSubmit { commitEdit() }
+                    .onChange(of: isEditing) {
+                        if !isEditing { commitEdit() }
+                    }
+            } else {
+                Text(String(format: format, value))
+                    .font(.subheadline.monospacedDigit().bold())
+                    .frame(minWidth: 70)
+                    .multilineTextAlignment(.center)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        textValue = String(format: format, value)
+                        isEditing = true
+                    }
+            }
 
             Button {
                 value = min(range.upperBound, value + step)
@@ -571,6 +593,12 @@ private struct BodyStepperInput: View {
                     .background(.fill.tertiary, in: RoundedRectangle(cornerRadius: 8))
             }
             .buttonStyle(.plain)
+        }
+    }
+
+    private func commitEdit() {
+        if let parsed = Double(textValue) {
+            value = min(range.upperBound, max(range.lowerBound, parsed))
         }
     }
 }

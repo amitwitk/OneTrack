@@ -87,6 +87,7 @@ struct WorkoutPlanDetailView: View {
                 }
             }
         }
+        .scrollDismissesKeyboard(.interactively)
         .navigationTitle(plan.name)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -121,7 +122,9 @@ struct WorkoutPlanDetailView: View {
     // MARK: - Rows
 
     private func sectionHeaderRow(_ name: String) -> some View {
-        HStack {
+        let hasExercises = plan.exercises.contains { $0.section == name }
+
+        return HStack {
             Image(systemName: "folder.fill")
                 .font(.caption)
                 .foregroundStyle(.blue)
@@ -129,8 +132,32 @@ struct WorkoutPlanDetailView: View {
                 .font(.subheadline.bold())
                 .foregroundStyle(.secondary)
             Spacer()
+            if !hasExercises && !name.isEmpty {
+                Image(systemName: "xmark.circle")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
         }
         .listRowBackground(Color(.systemGroupedBackground))
+        .contextMenu {
+            if !name.isEmpty {
+                if hasExercises {
+                    Text("Move exercises first to delete this group")
+                } else {
+                    Button(role: .destructive) {
+                        deleteGroup(name)
+                    } label: {
+                        Label("Delete Group", systemImage: "trash")
+                    }
+                }
+            }
+        }
+    }
+
+    private func deleteGroup(_ name: String) {
+        plan.knownGroups.removeAll { $0 == name }
+        try? modelContext.save()
+        rebuildFlatList()
     }
 
     private func exerciseRow(_ exercise: Exercise) -> some View {

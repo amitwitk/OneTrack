@@ -62,6 +62,7 @@ struct ExercisePickerView: View {
                 }
             }
             .searchable(text: $searchText, prompt: "Search exercises")
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Add Exercises")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
