@@ -6,6 +6,28 @@ enum SetType: String, Codable, CaseIterable {
     case warmUp
     case dropSet
     case toFailure
+
+    var next: SetType {
+        switch self {
+        case .normal: .warmUp
+        case .warmUp: .dropSet
+        case .dropSet: .toFailure
+        case .toFailure: .normal
+        }
+    }
+
+    var isPRExcluded: Bool {
+        self == .warmUp || self == .dropSet
+    }
+
+    var badge: String {
+        switch self {
+        case .normal: ""
+        case .warmUp: "W"
+        case .dropSet: "D"
+        case .toFailure: "F"
+        }
+    }
 }
 
 @Model
