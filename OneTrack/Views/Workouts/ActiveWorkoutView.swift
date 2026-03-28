@@ -7,28 +7,28 @@ struct ActiveWorkoutView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @State private var elapsedSeconds: Int = 0
-    @State private var isTimerRunning = true
+    @State private var engine: WorkoutEngine?
     @State private var showFinishConfirmation = false
     @State private var showCancelConfirmation = false
     @State private var showFinishSummary = false
     @State private var showAddExercise = false
 
-    // Rest timer
-    @State private var restTimeRemaining: Int = 0
-    @State private var isResting = false
-    @State private var restDuration: Int = 90
-
-    // PR celebration
+    // PR celebration (UI-only)
     @State private var showConfetti = false
 
-    private var sortedLogs: [ExerciseLog] {
-        session.exerciseLogs.sorted { $0.sortOrder < $1.sortOrder }
-    }
+    // Convenience accessors delegating to engine
+    private var sortedLogs: [ExerciseLog] { engine?.sortedLogs ?? [] }
+    private var completedCount: Int { engine?.completedCount ?? 0 }
+    private var totalCount: Int { engine?.totalCount ?? 0 }
+    private var progress: Double { engine?.progress ?? 0 }
+    private var elapsedSeconds: Int { engine?.elapsedSeconds ?? 0 }
+    private var isResting: Bool { engine?.isResting ?? false }
+    private var restTimeRemaining: Int { engine?.restTimeRemaining ?? 0 }
+    private var restDuration: Int { engine?.restDuration ?? 90 }
 
     private var groupedLogs: [(String, [ExerciseLog])] {
         var result: [(String, [ExerciseLog])] = []
-        var currentSection = "\u{0}" // impossible sentinel
+        var currentSection = "\u{0}"
         for log in sortedLogs {
             if log.section != currentSection {
                 currentSection = log.section
@@ -38,22 +38,6 @@ struct ActiveWorkoutView: View {
             }
         }
         return result
-    }
-
-    private var workingSets: [SetLog] {
-        sortedLogs.flatMap(\.sets).filter { !$0.isWarmUp }
-    }
-
-    private var completedCount: Int {
-        workingSets.filter(\.isCompleted).count
-    }
-
-    private var totalCount: Int {
-        workingSets.count
-    }
-
-    private var progress: Double {
-        totalCount > 0 ? Double(completedCount) / Double(totalCount) : 0
     }
 
     var body: some View {
@@ -168,21 +152,11 @@ struct ActiveWorkoutView: View {
                 addExercises(templates)
             }
         }
-        .task(id: "workout-timer") {
-            while isTimerRunning && !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1))
-                guard isTimerRunning else { break }
-                elapsedSeconds = Int(Date.now.timeIntervalSince(session.startedAt))
-            }
-        }
-        .task(id: isResting) {
-            guard isResting else { return }
-            while isResting && restTimeRemaining > 0 && !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1))
-                restTimeRemaining -= 1
-            }
-            if restTimeRemaining <= 0 {
-                isResting = false
+        .onAppear {
+            if engine == nil {
+                let e = WorkoutEngine(modelContext: modelContext)
+                e.resumeSession(session, previous: previousSession)
+                engine = e
             }
         }
         .sensoryFeedback(.success, trigger: completedCount)
@@ -270,8 +244,7 @@ struct ActiveWorkoutView: View {
             Spacer()
 
             Button {
-                withAnimation { isResting = false }
-                restTimeRemaining = 0
+                withAnimation { engine?.skipRestTimer() }
             } label: {
                 Text("Skip")
                     .font(.subheadline.bold())
@@ -289,63 +262,26 @@ struct ActiveWorkoutView: View {
         .animation(.spring(duration: 0.3), value: isResting)
     }
 
-    // MARK: - Actions
+    // MARK: - Actions (delegated to WorkoutEngine)
 
     private func addExercises(_ templates: [ExerciseTemplate]) {
-        let maxOrder = sortedLogs.last?.sortOrder ?? -1
-        for (index, template) in templates.enumerated() {
-            let log = ExerciseLog(
-                exerciseName: template.name,
-                sortOrder: maxOrder + 1 + index,
-                isIsometric: template.isIsometric
-            )
-            log.session = session
-            modelContext.insert(log)
-
-            for setIndex in 0..<template.defaultSets {
-                let setLog = SetLog(
-                    setNumber: setIndex + 1,
-                    reps: template.defaultReps,
-                    seconds: template.defaultSeconds,
-                    weightKg: 0
-                )
-                setLog.exerciseLog = log
-                modelContext.insert(setLog)
-            }
-        }
-        try? modelContext.save()
+        engine?.addExercises(templates)
     }
 
     private func startRestTimer(duration: Int? = nil) {
-        restDuration = duration ?? (session.plan?.defaultRestSeconds ?? 90)
-        restTimeRemaining = restDuration
-        withAnimation { isResting = true }
+        withAnimation { engine?.startRestTimer(duration: duration) }
     }
 
     private func deleteSet(_ setLog: SetLog, from log: ExerciseLog) {
-        PlanManagement.deleteSet(setLog, from: log)
-        modelContext.delete(setLog)
-        try? modelContext.save()
+        engine?.deleteSet(setLog, from: log)
     }
 
     private func addSet(to log: ExerciseLog) {
-        let sortedSets = log.sets.sorted { $0.setNumber < $1.setNumber }
-        let lastSet = sortedSets.last
-        let newSetNumber = (lastSet?.setNumber ?? 0) + 1
-        let newSet = SetLog(
-            setNumber: newSetNumber,
-            reps: lastSet?.reps ?? 0,
-            seconds: lastSet?.seconds ?? 0,
-            weightKg: lastSet?.weightKg ?? 0
-        )
-        newSet.exerciseLog = log
-        modelContext.insert(newSet)
+        _ = engine?.addSet(to: log)
     }
 
     private func exerciseRestDuration(for log: ExerciseLog) -> Int? {
-        session.plan?.exercises
-            .first { $0.name == log.exerciseName }?
-            .restSeconds
+        engine?.exerciseRestDuration(for: log)
     }
 
     private func triggerPRCelebration() {
@@ -359,23 +295,17 @@ struct ActiveWorkoutView: View {
     }
 
     private func presentFinishSummary() {
-        session.durationSeconds = elapsedSeconds
-        isTimerRunning = false
-        isResting = false
+        engine?.prepareFinish()
         showFinishSummary = true
     }
 
     private func finishWorkout() {
-        session.isCompleted = true
-        try? modelContext.save()
+        engine?.finishWorkout()
         dismiss()
     }
 
     private func cancelWorkout() {
-        isTimerRunning = false
-        isResting = false
-        modelContext.delete(session)
-        try? modelContext.save()
+        engine?.cancelWorkout()
         dismiss()
     }
 }
