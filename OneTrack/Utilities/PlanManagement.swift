@@ -103,6 +103,14 @@ struct PlanManagement {
         }
     }
 
+    /// Reorders plans by applying an IndexSet move and recalculating sortOrder.
+    static func reorderPlans(_ plans: inout [WorkoutPlan], from: IndexSet, to: Int) {
+        plans.move(fromOffsets: from, toOffset: to)
+        for (index, plan) in plans.enumerated() {
+            plan.sortOrder = index
+        }
+    }
+
     /// Deletes a set from an exercise log and renumbers remaining sets.
     static func deleteSet(_ setLog: SetLog, from log: ExerciseLog) {
         let deletedNumber = setLog.setNumber
