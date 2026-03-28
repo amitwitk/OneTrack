@@ -11,6 +11,7 @@ final class WorkoutPlan {
     @Relationship(deleteRule: .cascade, inverse: \WorkoutSession.plan)
     var sessions: [WorkoutSession] = []
     var defaultRestSeconds: Int = 90
+    var knownGroups: [String] = []
     var createdAt: Date = Date()
 
     init(name: String, planDescription: String, sortOrder: Int, defaultRestSeconds: Int = 90, createdAt: Date = .now) {

@@ -81,7 +81,8 @@ struct ActiveWorkoutView: View {
                                 onPRDetected: {
                                     triggerPRCelebration()
                                 },
-                                onAddSet: { addSet(to: log) }
+                                onAddSet: { addSet(to: log) },
+                                onDeleteSet: { setLog in deleteSet(setLog, from: log) }
                             )
                         }
                     }
@@ -319,6 +320,12 @@ struct ActiveWorkoutView: View {
         withAnimation { isResting = true }
     }
 
+    private func deleteSet(_ setLog: SetLog, from log: ExerciseLog) {
+        PlanManagement.deleteSet(setLog, from: log)
+        modelContext.delete(setLog)
+        try? modelContext.save()
+    }
+
     private func addSet(to log: ExerciseLog) {
         let sortedSets = log.sets.sorted { $0.setNumber < $1.setNumber }
         let lastSet = sortedSets.last
@@ -380,6 +387,7 @@ private struct ExerciseSectionView: View {
     let onSetCompleted: () -> Void
     let onPRDetected: () -> Void
     let onAddSet: () -> Void
+    let onDeleteSet: (SetLog) -> Void
 
     private var sortedSets: [SetLog] {
         log.sets.sorted { $0.setNumber < $1.setNumber }
@@ -458,6 +466,15 @@ private struct ExerciseSectionView: View {
                     onCompleted: onSetCompleted,
                     onPRDetected: onPRDetected
                 )
+                .contextMenu {
+                    if sortedSets.count > 1 {
+                        Button(role: .destructive) {
+                            onDeleteSet(setLog)
+                        } label: {
+                            Label("Delete Set", systemImage: "trash")
+                        }
+                    }
+                }
 
                 if setLog.setNumber < sortedSets.count {
                     Divider()
