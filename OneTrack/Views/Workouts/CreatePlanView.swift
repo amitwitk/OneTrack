@@ -78,6 +78,7 @@ struct CreatePlanView: View {
                 }
             }
         }
+        .scrollDismissesKeyboard(.interactively)
         .navigationTitle(editingPlan == nil ? "New Workout" : "Edit Workout")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

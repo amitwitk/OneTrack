@@ -104,6 +104,7 @@ struct ActiveWorkoutView: View {
                 }
                 .padding()
             }
+            .scrollDismissesKeyboard(.interactively)
 
             if isResting {
                 restTimerOverlay
@@ -745,6 +746,9 @@ private struct StepperInput<V: BinaryFloatingPoint>: View {
     let range: ClosedRange<V>
     var decimals: Bool = false
 
+    @FocusState private var isEditing: Bool
+    @State private var textValue = ""
+
     var body: some View {
         HStack(spacing: 2) {
             Button {
@@ -757,10 +761,28 @@ private struct StepperInput<V: BinaryFloatingPoint>: View {
             }
             .buttonStyle(.plain)
 
-            Text(decimals ? String(format: "%.1f", Double(value)) : "\(Int(value))")
-                .font(.subheadline.monospacedDigit().bold())
-                .frame(minWidth: 32)
-                .multilineTextAlignment(.center)
+            if isEditing {
+                TextField("", text: $textValue)
+                    .keyboardType(.decimalPad)
+                    .font(.subheadline.monospacedDigit().bold())
+                    .multilineTextAlignment(.center)
+                    .frame(minWidth: 32)
+                    .focused($isEditing)
+                    .onSubmit { commitEdit() }
+                    .onChange(of: isEditing) {
+                        if !isEditing { commitEdit() }
+                    }
+            } else {
+                Text(decimals ? String(format: "%.1f", Double(value)) : "\(Int(value))")
+                    .font(.subheadline.monospacedDigit().bold())
+                    .frame(minWidth: 32)
+                    .multilineTextAlignment(.center)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        textValue = decimals ? String(format: "%.1f", Double(value)) : "\(Int(value))"
+                        isEditing = true
+                    }
+            }
 
             Button {
                 value = min(range.upperBound, value + step)
@@ -771,6 +793,13 @@ private struct StepperInput<V: BinaryFloatingPoint>: View {
                     .background(.fill.tertiary, in: RoundedRectangle(cornerRadius: 6))
             }
             .buttonStyle(.plain)
+        }
+    }
+
+    private func commitEdit() {
+        if let parsed = Double(textValue) {
+            let clamped = min(Double(range.upperBound), max(Double(range.lowerBound), parsed))
+            value = V(clamped)
         }
     }
 }

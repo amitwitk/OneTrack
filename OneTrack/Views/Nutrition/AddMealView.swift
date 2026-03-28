@@ -80,6 +80,7 @@ struct AddMealView: View {
                     .disabled(quickAddText.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle(editingMeal != nil ? "Edit Meal" : "Add Meal")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

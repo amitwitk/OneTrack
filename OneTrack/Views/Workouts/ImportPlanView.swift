@@ -38,7 +38,7 @@ struct ImportPlanView: View {
                     .font(.caption)
                 }
             } footer: {
-                Text("Format: `- Exercise Name: SETSxREPS` or `- Exercise Name: SETSxSECONDSs` for isometric")
+                Text("Format:\n`- Exercise Name: SETSxREPS`\n`- Exercise Name: SETSxSECONDSs` (isometric)\n`[Group Name]` — groups exercises into sections")
                     .font(.caption2)
             }
 
@@ -85,6 +85,7 @@ struct ImportPlanView: View {
                 }
             }
         }
+        .scrollDismissesKeyboard(.interactively)
         .navigationTitle("Import Workout")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -163,15 +164,22 @@ struct ImportPlanView: View {
         name: Push Day
         rest: 90
 
+        [Chest]
         - Bench Press: 4x10
+        - Cable Flyes: 3x12
+
+        [Shoulders]
         - Overhead Press: 3x10
         - Lateral Raises: 3x15
 
         ---
         name: Pull Day
 
+        [Back]
         - Deadlift: 4x6
         - Barbell Rows: 4x10
+
+        [Core]
         - Plank: 3x60s
         """
     }
