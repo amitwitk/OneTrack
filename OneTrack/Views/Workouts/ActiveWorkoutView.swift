@@ -812,6 +812,7 @@ private struct ConfettiView: View {
 
 // MARK: - Stepper Input Component
 
+/// Thin wrapper to preserve existing StepperInput call sites.
 private struct StepperInput<V: BinaryFloatingPoint>: View {
     @Binding var value: V
     let label: String
@@ -819,61 +820,16 @@ private struct StepperInput<V: BinaryFloatingPoint>: View {
     let range: ClosedRange<V>
     var decimals: Bool = false
 
-    @FocusState private var isEditing: Bool
-    @State private var textValue = ""
-
     var body: some View {
-        HStack(spacing: 2) {
-            Button {
-                value = max(range.lowerBound, value - step)
-            } label: {
-                Image(systemName: "minus")
-                    .font(.caption2.bold())
-                    .frame(width: 28, height: 32)
-                    .background(.fill.tertiary, in: RoundedRectangle(cornerRadius: 6))
-            }
-            .buttonStyle(.plain)
-
-            if isEditing {
-                TextField("", text: $textValue)
-                    .keyboardType(.decimalPad)
-                    .font(.subheadline.monospacedDigit().bold())
-                    .multilineTextAlignment(.center)
-                    .frame(minWidth: 32)
-                    .focused($isEditing)
-                    .onSubmit { commitEdit() }
-                    .onChange(of: isEditing) {
-                        if !isEditing { commitEdit() }
-                    }
-            } else {
-                Text(decimals ? String(format: "%.1f", Double(value)) : "\(Int(value))")
-                    .font(.subheadline.monospacedDigit().bold())
-                    .frame(minWidth: 32)
-                    .multilineTextAlignment(.center)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        textValue = decimals ? String(format: "%.1f", Double(value)) : "\(Int(value))"
-                        isEditing = true
-                    }
-            }
-
-            Button {
-                value = min(range.upperBound, value + step)
-            } label: {
-                Image(systemName: "plus")
-                    .font(.caption2.bold())
-                    .frame(width: 28, height: 32)
-                    .background(.fill.tertiary, in: RoundedRectangle(cornerRadius: 6))
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    private func commitEdit() {
-        if let parsed = Double(textValue) {
-            let clamped = min(Double(range.upperBound), max(Double(range.lowerBound), parsed))
-            value = V(clamped)
-        }
+        TappableStepperInput(
+            value: Binding(
+                get: { Double(value) },
+                set: { value = V($0) }
+            ),
+            step: Double(step),
+            range: Double(range.lowerBound)...Double(range.upperBound),
+            decimals: decimals
+        )
     }
 }
 

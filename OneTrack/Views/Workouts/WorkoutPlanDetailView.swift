@@ -22,9 +22,10 @@ struct WorkoutPlanDetailView: View {
                 ForEach(flatList) { item in
                     switch item {
                     case .sectionHeader(let name):
+                        let hasExercises = plan.exercises.contains { $0.section == name }
                         sectionHeaderRow(name)
                             .moveDisabled(true)
-                            .deleteDisabled(true)
+                            .deleteDisabled(hasExercises)
                     case .exercise(let exercise):
                         exerciseRow(exercise)
                     }
@@ -132,7 +133,7 @@ struct WorkoutPlanDetailView: View {
                 .font(.subheadline.bold())
                 .foregroundStyle(.secondary)
             Spacer()
-            if !hasExercises && !name.isEmpty {
+            if !hasExercises {
                 Image(systemName: "xmark.circle")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
@@ -140,15 +141,13 @@ struct WorkoutPlanDetailView: View {
         }
         .listRowBackground(Color(.systemGroupedBackground))
         .contextMenu {
-            if !name.isEmpty {
-                if hasExercises {
-                    Text("Move exercises first to delete this group")
-                } else {
-                    Button(role: .destructive) {
-                        deleteGroup(name)
-                    } label: {
-                        Label("Delete Group", systemImage: "trash")
-                    }
+            if hasExercises {
+                Text("Move exercises first to delete this group")
+            } else {
+                Button(role: .destructive) {
+                    deleteGroup(name)
+                } label: {
+                    Label("Delete Group", systemImage: "trash")
                 }
             }
         }
@@ -199,8 +198,11 @@ struct WorkoutPlanDetailView: View {
 
     private func deleteItems(at offsets: IndexSet) {
         for index in offsets {
-            if case .exercise(let exercise) = flatList[index] {
+            switch flatList[index] {
+            case .exercise(let exercise):
                 modelContext.delete(exercise)
+            case .sectionHeader(let name):
+                deleteGroup(name)
             }
         }
         flatList.remove(atOffsets: offsets)
