@@ -103,6 +103,7 @@ struct ActiveWorkoutView: View {
                     Color.clear.frame(height: isResting ? 80 : 0)
                 }
                 .padding()
+                .dismissKeyboardOnTap()
             }
             .scrollDismissesKeyboard(.interactively)
 

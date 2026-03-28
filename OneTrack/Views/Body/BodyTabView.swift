@@ -67,6 +67,7 @@ struct BodyTabView: View {
                     recentMeasurementsSection
                 }
                 .padding(.vertical)
+                .dismissKeyboardOnTap()
             }
             .scrollDismissesKeyboard(.interactively)
             .background(Color(.systemGroupedBackground))
