@@ -10,6 +10,9 @@ struct DashboardView: View {
     @Query(sort: \WeightEntry.date, order: .reverse)
     private var weightEntries: [WeightEntry]
 
+    @Environment(\.modelContext) private var modelContext
+    @State private var showQuickLogWeight = false
+
     private var thisWeekCount: Int { DashboardCalculations.thisWeekCount(sessions: recentSessions) }
     private var totalVolume: String { DashboardCalculations.totalVolume(sessions: recentSessions) }
     private var streakDays: Int { DashboardCalculations.streakDays(sessions: recentSessions) }
@@ -68,6 +71,9 @@ struct DashboardView: View {
                         )
                     }
                     .padding(.horizontal)
+
+                    // Quick Log Weight
+                    quickLogWeightCard
 
                     // Charts
                     DashboardChartsSection(
@@ -146,5 +152,126 @@ struct DashboardView: View {
         .padding(.horizontal)
     }
 
+    private var quickLogWeightCard: some View {
+        Button {
+            showQuickLogWeight = true
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "scalemass.fill")
+                    .font(.title3)
+                    .foregroundStyle(.blue)
+                    .frame(width: 40, height: 40)
+                    .background(.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Log Weight")
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.primary)
+                    if let lastWeight = weightEntries.first?.weightKg {
+                        Text("Last: \(lastWeight.formattedWeight)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Tap to log")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer()
+
+                Image(systemName: "plus.circle.fill")
+                    .font(.title3)
+                    .foregroundStyle(.blue)
+            }
+            .padding(14)
+            .background(.background, in: RoundedRectangle(cornerRadius: 14))
+            .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal)
+        .sheet(isPresented: $showQuickLogWeight) {
+            QuickLogWeightSheet(
+                defaultWeight: weightEntries.first?.weightKg ?? 75.0,
+                modelContext: modelContext
+            )
+        }
+    }
+
     private var greetingText: String { DashboardCalculations.greeting() }
+}
+
+// MARK: - Quick Log Weight Sheet
+
+struct QuickLogWeightSheet: View {
+    let defaultWeight: Double
+    let modelContext: ModelContext
+    @Environment(\.dismiss) private var dismiss
+    @State private var weightValue: Double = 75.0
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                Spacer()
+
+                Image(systemName: "scalemass.fill")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.blue)
+
+                Text(String(format: "%.1f kg", weightValue))
+                    .font(.largeTitle.bold().monospacedDigit())
+
+                HStack(spacing: 16) {
+                    Button {
+                        weightValue = max(20, weightValue - 0.1)
+                    } label: {
+                        Image(systemName: "minus.circle.fill")
+                            .font(.title)
+                            .foregroundStyle(.blue)
+                    }
+
+                    Slider(value: $weightValue, in: 30...200, step: 0.1)
+                        .tint(.blue)
+
+                    Button {
+                        weightValue = min(300, weightValue + 0.1)
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.title)
+                            .foregroundStyle(.blue)
+                    }
+                }
+                .padding(.horizontal, 24)
+
+                Spacer()
+
+                Button {
+                    let entry = WeightEntry(date: .now, weightKg: (weightValue * 10).rounded() / 10, source: "manual")
+                    modelContext.insert(entry)
+                    try? modelContext.save()
+                    dismiss()
+                } label: {
+                    Text("Save")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(.blue, in: RoundedRectangle(cornerRadius: 14))
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 16)
+            }
+            .navigationTitle("Log Weight")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+        }
+        .onAppear {
+            weightValue = (defaultWeight * 10).rounded() / 10
+        }
+        .presentationDetents([.medium])
+    }
 }

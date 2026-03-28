@@ -12,6 +12,8 @@ struct BodyTabView: View {
     private var measurements: [BodyMeasurement]
 
     @State private var healthKitManager = HealthKitManager()
+    @AppStorage("userHeightCm") private var heightCm: Double = 170.0
+    @State private var showHeightSetting = false
 
     // Weight entry — defaults loaded from last entry
     @State private var weightValue: Double = 75.0
@@ -54,6 +56,16 @@ struct BodyTabView: View {
         BodyCalculations.entriesThisMonth(entries: weightEntries)
     }
 
+    private var bmi: Double? {
+        guard let weight = currentWeight else { return nil }
+        let value = BodyCalculations.bmi(weightKg: weight, heightCm: heightCm)
+        return value > 0 ? value : nil
+    }
+
+    private var weeklyRate: Double? {
+        BodyCalculations.weeklyRateOfChange(entries: weightEntries)
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -80,6 +92,29 @@ struct BodyTabView: View {
         .onDisappear {
             healthKitManager.stopObservingWeightChanges()
         }
+        .sheet(isPresented: $showHeightSetting) {
+            NavigationStack {
+                Form {
+                    Section("Your Height") {
+                        Stepper("Height: \(Int(heightCm)) cm", value: $heightCm, in: 100...250)
+                    }
+                    if let bmiValue = bmi {
+                        Section("BMI") {
+                            LabeledContent("BMI", value: String(format: "%.1f", bmiValue))
+                            LabeledContent("Category", value: BodyCalculations.bmiCategory(bmi: bmiValue))
+                        }
+                    }
+                }
+                .navigationTitle("Height Setting")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Done") { showHeightSetting = false }
+                    }
+                }
+            }
+            .presentationDetents([.medium])
+        }
         .alert("HealthKit Access Denied", isPresented: $showHealthKitDenied) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -97,23 +132,57 @@ struct BodyTabView: View {
                 icon: "scalemass.fill",
                 color: .blue
             )
+
+            // BMI with category badge
+            if let bmiValue = bmi {
+                VStack(alignment: .leading, spacing: 8) {
+                    Image(systemName: "figure.stand")
+                        .font(.title3)
+                        .foregroundStyle(bmiColor(bmiValue))
+                        .frame(width: 36, height: 36)
+                        .background(bmiColor(bmiValue).opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+
+                    Text(String(format: "%.1f", bmiValue))
+                        .font(.title2.bold().monospacedDigit())
+
+                    HStack(spacing: 4) {
+                        Text("BMI")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(BodyCalculations.bmiCategory(bmi: bmiValue))
+                            .font(.caption2.bold())
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(bmiColor(bmiValue), in: Capsule())
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .cardStyle()
+                .onTapGesture { showHeightSetting = true }
+            } else {
+                StatCard(
+                    title: "BMI",
+                    value: "--",
+                    icon: "figure.stand",
+                    color: .gray
+                )
+                .onTapGesture { showHeightSetting = true }
+            }
+
+            // Rate of change
             StatCard(
-                title: "Weekly Change",
-                value: BodyCalculations.weeklyChangeFormatted(weeklyChange),
+                title: "Rate",
+                value: weeklyRate.map { "\(BodyCalculations.weeklyRateArrow($0)) \(BodyCalculations.weeklyRateFormatted($0))" } ?? "--",
                 icon: "arrow.up.arrow.down",
                 color: .purple
             )
+
             StatCard(
                 title: "Latest Waist",
                 value: latestWaist.map { String(format: "%.1f cm", $0) } ?? "--",
                 icon: "ruler.fill",
                 color: .orange
-            )
-            StatCard(
-                title: "Entries",
-                value: "\(entriesThisMonth)",
-                icon: "calendar",
-                color: .teal
             )
         }
         .padding(.horizontal)
@@ -540,6 +609,15 @@ struct BodyTabView: View {
         }
         if !toImport.isEmpty {
             try? modelContext.save()
+        }
+    }
+
+    private func bmiColor(_ bmi: Double) -> Color {
+        switch bmi {
+        case ..<18.5: .blue
+        case 18.5..<25: .green
+        case 25..<30: .yellow
+        default: .red
         }
     }
 
