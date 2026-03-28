@@ -357,6 +357,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "OneTrack reads steps, weight, active calories, and workouts from Health to display your activity data.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "OneTrack writes weight measurements to Health so your data stays in sync across apps.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -388,6 +389,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "OneTrack reads steps, weight, active calories, and workouts from Health to display your activity data.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "OneTrack writes weight measurements to Health so your data stays in sync across apps.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

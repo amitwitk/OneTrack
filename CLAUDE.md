@@ -84,14 +84,29 @@ A personal all-in-one fitness and health tracking iOS app built with Swift/Swift
 
 For each feature or bug fix:
 
-1. **Pick an issue** from [GitHub Issues](https://github.com/amitwitk/OneTrack/issues) — labeled by domain (`workout`, `nutrition`, `body`, `activity`, `dashboard`)
-2. **Pull latest main** — `git checkout main && git pull origin main`
-3. **Create a branch** from `main` — `feat/<name>` or `fix/<name>`
-3. **Plan** the implementation (identify models, views, and dependencies)
-4. **Implement** with clean, testable code — extract logic into standalone functions/structs for testability
-5. **Add tests** — unit tests using Swift Testing framework, in-memory SwiftData containers, aim for coverage on all new logic
-6. **Build and test locally** — `xcodebuild test -scheme OneTrack -destination 'platform=iOS Simulator,name=iPhone 16' CODE_SIGNING_ALLOWED=NO`
-7. **Commit and push** — conventional commit messages (`feat:`, `fix:`, `test:`, `refactor:`)
-8. **Create PR** — with summary, test plan, and `Closes #N`
-9. **CI must pass** — GitHub Actions runs build + test automatically
-10. **Squash merge** to `main` — keeps history clean
+1. **Pick an issue** from the [project board](https://github.com/users/amitwitk/projects/6) or [GitHub Issues](https://github.com/amitwitk/OneTrack/issues) — labeled by domain (`workout`, `nutrition`, `body`, `activity`, `dashboard`)
+2. **Move to In Progress** — assign yourself and move the issue to "In Progress" on the [project board](https://github.com/users/amitwitk/projects/6)
+3. **Pull latest main** — `git checkout main && git pull origin main`
+4. **Create a branch** from `main` — `feat/<name>` or `fix/<name>`
+5. **Plan** the implementation (identify models, views, and dependencies)
+6. **Implement** with clean, testable code — extract logic into standalone functions/structs for testability
+7. **Add tests** — unit tests using Swift Testing framework, in-memory SwiftData containers, aim for coverage on all new logic
+8. **Build and test locally** — `xcodebuild test -scheme OneTrack -destination 'platform=iOS Simulator,name=iPhone 16' CODE_SIGNING_ALLOWED=NO`
+9. **Commit and push** — conventional commit messages (`feat:`, `fix:`, `test:`, `refactor:`)
+10. **Create PR** — with summary, test plan, and `Closes #N` (ensures issues auto-close on merge)
+11. **CI must pass** — GitHub Actions runs build + test automatically
+12. **Squash merge** to `main` — keeps history clean
+13. **Verify issues closed** — after merge, confirm referenced issues are closed and moved to "Done" on the project board. If not, close and move them manually
+
+## Bug Fix Workflow
+
+When a bug is identified (runtime crash, incorrect behavior, etc.):
+
+1. **Open a GitHub issue** — label with `bug` + domain label, describe the symptom and root cause
+2. **Move to In Progress** on the [project board](https://github.com/users/amitwitk/projects/6)
+3. **Identify** — read logs/crash traces, locate the root cause in code
+4. **Plan** — determine the fix and what test would have caught this
+5. **Write a regression test first** — the test must fail without the fix (proves it catches the bug)
+6. **Fix the bug** — minimal change to resolve the root cause
+7. **Verify test passes** — the regression test now passes with the fix applied
+8. **PR must include test coverage** — PRs for bugs are not merged without a test that prevents recurrence
