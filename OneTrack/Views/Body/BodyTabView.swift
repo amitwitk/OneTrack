@@ -549,6 +549,9 @@ private struct BodyStepperInput: View {
     let range: ClosedRange<Double>
     let format: String
 
+    @FocusState private var isEditing: Bool
+    @State private var textValue = ""
+
     var body: some View {
         TappableStepperInput(
             value: $value,
@@ -561,5 +564,11 @@ private struct BodyStepperInput: View {
             spacing: 4,
             cornerRadius: 8
         )
+    }
+
+    private func commitEdit() {
+        if let parsed = Double(textValue) {
+            value = min(range.upperBound, max(range.lowerBound, parsed))
+        }
     }
 }

@@ -821,6 +821,9 @@ private struct StepperInput<V: BinaryFloatingPoint>: View {
     let range: ClosedRange<V>
     var decimals: Bool = false
 
+    @FocusState private var isEditing: Bool
+    @State private var textValue = ""
+
     var body: some View {
         TappableStepperInput(
             value: Binding(
@@ -831,6 +834,13 @@ private struct StepperInput<V: BinaryFloatingPoint>: View {
             range: Double(range.lowerBound)...Double(range.upperBound),
             decimals: decimals
         )
+    }
+
+    private func commitEdit() {
+        if let parsed = Double(textValue) {
+            let clamped = min(Double(range.upperBound), max(Double(range.lowerBound), parsed))
+            value = V(clamped)
+        }
     }
 }
 
