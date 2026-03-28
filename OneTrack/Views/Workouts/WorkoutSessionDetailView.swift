@@ -4,6 +4,8 @@ import SwiftData
 struct WorkoutSessionDetailView: View {
     let session: WorkoutSession
 
+    @State private var exerciseForHistory: String?
+
     private var sortedLogs: [ExerciseLog] {
         session.exerciseLogs.sorted { $0.sortOrder < $1.sortOrder }
     }
@@ -21,19 +23,23 @@ struct WorkoutSessionDetailView: View {
             }
 
             ForEach(sortedLogs) { log in
-                Section(log.exerciseName) {
+                Section {
+                    // Notes
+                    if !log.notes.isEmpty {
+                        HStack(spacing: 6) {
+                            Image(systemName: "note.text")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(log.notes)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
                     ForEach(log.sets.sorted { $0.setNumber < $1.setNumber }) { setLog in
                         HStack {
-                            if setLog.isWarmUp {
-                                Text("W")
-                                    .font(.caption.bold())
-                                    .foregroundStyle(.white)
-                                    .frame(width: 22, height: 22)
-                                    .background(.gray.opacity(0.5), in: Circle())
-                            } else {
-                                Text("Set \(setLog.setNumber)")
-                                    .font(.subheadline)
-                            }
+                            setTypeBadge(setLog)
+
                             if setLog.isPersonalRecord {
                                 Image(systemName: "trophy.fill")
                                     .font(.caption)
@@ -50,9 +56,58 @@ struct WorkoutSessionDetailView: View {
                                 .foregroundStyle(setLog.isCompleted ? .green : .gray)
                         }
                     }
+                } header: {
+                    Button {
+                        exerciseForHistory = log.exerciseName
+                    } label: {
+                        HStack {
+                            Text(log.exerciseName)
+                            Image(systemName: "chart.xyaxis.line")
+                                .font(.caption2)
+                                .foregroundStyle(.blue)
+                        }
+                    }
                 }
             }
         }
         .navigationTitle(session.plan?.name ?? "Workout")
+        .sheet(item: Binding(
+            get: { exerciseForHistory.map { HistorySheetID(name: $0) } },
+            set: { exerciseForHistory = $0?.name }
+        )) { item in
+            ExerciseHistoryView(exerciseName: item.name)
+        }
     }
+
+    @ViewBuilder
+    private func setTypeBadge(_ setLog: SetLog) -> some View {
+        switch setLog.setType {
+        case .warmUp:
+            Text("W")
+                .font(.caption.bold())
+                .foregroundStyle(.white)
+                .frame(width: 22, height: 22)
+                .background(.gray.opacity(0.5), in: Circle())
+        case .dropSet:
+            Text("D")
+                .font(.caption.bold())
+                .foregroundStyle(.white)
+                .frame(width: 22, height: 22)
+                .background(.orange, in: Circle())
+        case .toFailure:
+            Text("F")
+                .font(.caption.bold())
+                .foregroundStyle(.white)
+                .frame(width: 22, height: 22)
+                .background(.red, in: Circle())
+        case .normal:
+            Text("Set \(setLog.setNumber)")
+                .font(.subheadline)
+        }
+    }
+}
+
+private struct HistorySheetID: Identifiable {
+    let name: String
+    var id: String { name }
 }
