@@ -305,8 +305,16 @@ struct ActiveWorkoutView: View {
     }
 
     private func cancelWorkout() {
-        engine?.cancelWorkout()
+        let sessionToDelete = engine?.cancelWorkout()
         dismiss()
+        // Delete after dismiss to avoid SwiftData accessing deleted backing data
+        if let sessionToDelete {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(300))
+                modelContext.delete(sessionToDelete)
+                try? modelContext.save()
+            }
+        }
     }
 }
 
