@@ -197,21 +197,31 @@ final class HealthKitManager {
 
     /// Fetches daily step counts for the last 7 days.
     func fetchWeeklySteps() async -> [(date: Date, steps: Int)] {
-        guard isAvailable else { return emptyWeekData(stepDefault: 0) }
-        return await fetchDailyStatistics(
-            type: HKQuantityType(.stepCount),
-            unit: .count(),
-            days: 7
-        ).map { (date: $0.date, steps: Int($0.value)) }
+        await fetchDailySteps(days: 7)
     }
 
     /// Fetches daily active calories for the last 7 days.
     func fetchWeeklyCalories() async -> [(date: Date, calories: Double)] {
-        guard isAvailable else { return emptyWeekData(calorieDefault: 0) }
+        await fetchDailyCalories(days: 7)
+    }
+
+    /// Fetches daily step counts for a configurable number of days.
+    func fetchDailySteps(days: Int) async -> [(date: Date, steps: Int)] {
+        guard isAvailable else { return [] }
+        return await fetchDailyStatistics(
+            type: HKQuantityType(.stepCount),
+            unit: .count(),
+            days: days
+        ).map { (date: $0.date, steps: Int($0.value)) }
+    }
+
+    /// Fetches daily active calories for a configurable number of days.
+    func fetchDailyCalories(days: Int) async -> [(date: Date, calories: Double)] {
+        guard isAvailable else { return [] }
         return await fetchDailyStatistics(
             type: HKQuantityType(.activeEnergyBurned),
             unit: .kilocalorie(),
-            days: 7
+            days: days
         ).map { (date: $0.date, calories: $0.value) }
     }
 
