@@ -1,5 +1,16 @@
 import SwiftUI
 
+// MARK: - Keyboard Dismiss
+
+extension View {
+    /// Dismisses keyboard when tapping outside of text fields.
+    func dismissKeyboardOnTap() -> some View {
+        self.onTapGesture {
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        }
+    }
+}
+
 // MARK: - Card Modifier
 
 struct CardStyle: ViewModifier {

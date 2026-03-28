@@ -10,6 +10,8 @@ struct WorkoutPlanDetailView: View {
     @State private var newGroupName = ""
     @State private var showExercisePicker = false
     @State private var flatList: [PlanListItem] = []
+    @State private var groupToDelete: String?
+    @State private var showDeleteGroupConfirmation = false
 
     private var completedSessions: [WorkoutSession] {
         plan.sessions.filter(\.isCompleted).sorted { $0.date > $1.date }
@@ -24,7 +26,6 @@ struct WorkoutPlanDetailView: View {
                     case .sectionHeader(let name):
                         sectionHeaderRow(name)
                             .moveDisabled(true)
-                            .deleteDisabled(true)
                     case .exercise(let exercise):
                         exerciseRow(exercise)
                     }
@@ -117,6 +118,22 @@ struct WorkoutPlanDetailView: View {
         } message: {
             Text("Enter a name for the exercise group")
         }
+        .confirmationDialog(
+            "Delete Group?",
+            isPresented: $showDeleteGroupConfirmation,
+            presenting: groupToDelete
+        ) { name in
+            Button("Delete Group & Exercises", role: .destructive) {
+                deleteGroupWithExercises(name)
+            }
+            Button("Cancel", role: .cancel) {
+                groupToDelete = nil
+                rebuildFlatList()
+            }
+        } message: { name in
+            let count = plan.exercises.filter { $0.section == name }.count
+            Text("This will delete the \"\(name.isEmpty ? "Exercises" : name)\" group and its \(count) exercise\(count == 1 ? "" : "s").")
+        }
     }
 
     // MARK: - Rows
@@ -132,7 +149,7 @@ struct WorkoutPlanDetailView: View {
                 .font(.subheadline.bold())
                 .foregroundStyle(.secondary)
             Spacer()
-            if !hasExercises && !name.isEmpty {
+            if !hasExercises {
                 Image(systemName: "xmark.circle")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
@@ -140,16 +157,15 @@ struct WorkoutPlanDetailView: View {
         }
         .listRowBackground(Color(.systemGroupedBackground))
         .contextMenu {
-            if !name.isEmpty {
+            Button(role: .destructive) {
                 if hasExercises {
-                    Text("Move exercises first to delete this group")
+                    groupToDelete = name
+                    showDeleteGroupConfirmation = true
                 } else {
-                    Button(role: .destructive) {
-                        deleteGroup(name)
-                    } label: {
-                        Label("Delete Group", systemImage: "trash")
-                    }
+                    deleteGroup(name)
                 }
+            } label: {
+                Label(hasExercises ? "Delete Group & Exercises" : "Delete Group", systemImage: "trash")
             }
         }
     }
@@ -157,6 +173,16 @@ struct WorkoutPlanDetailView: View {
     private func deleteGroup(_ name: String) {
         plan.knownGroups.removeAll { $0 == name }
         try? modelContext.save()
+        rebuildFlatList()
+    }
+
+    private func deleteGroupWithExercises(_ name: String) {
+        for exercise in plan.exercises where exercise.section == name {
+            modelContext.delete(exercise)
+        }
+        plan.knownGroups.removeAll { $0 == name }
+        try? modelContext.save()
+        groupToDelete = nil
         rebuildFlatList()
     }
 
@@ -199,13 +225,23 @@ struct WorkoutPlanDetailView: View {
 
     private func deleteItems(at offsets: IndexSet) {
         for index in offsets {
-            if case .exercise(let exercise) = flatList[index] {
+            switch flatList[index] {
+            case .exercise(let exercise):
                 modelContext.delete(exercise)
+                flatList.remove(at: index)
+                PlanManagement.reassignSectionsAndOrder(flatList: flatList)
+                try? modelContext.save()
+            case .sectionHeader(let name):
+                let hasExercises = plan.exercises.contains { $0.section == name }
+                if hasExercises {
+                    groupToDelete = name
+                    showDeleteGroupConfirmation = true
+                } else {
+                    deleteGroup(name)
+                    flatList.remove(at: index)
+                }
             }
         }
-        flatList.remove(atOffsets: offsets)
-        PlanManagement.reassignSectionsAndOrder(flatList: flatList)
-        try? modelContext.save()
     }
 
     private func addExercises(_ templates: [ExerciseTemplate]) {

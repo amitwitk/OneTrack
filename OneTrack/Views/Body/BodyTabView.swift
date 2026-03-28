@@ -67,6 +67,7 @@ struct BodyTabView: View {
                     recentMeasurementsSection
                 }
                 .padding(.vertical)
+                .dismissKeyboardOnTap()
             }
             .scrollDismissesKeyboard(.interactively)
             .background(Color(.systemGroupedBackground))
@@ -276,6 +277,7 @@ struct BodyTabView: View {
 
                 TextField("Notes (optional)", text: $measurementNotes)
                     .font(.subheadline)
+                    .submitLabel(.done)
                     .padding(10)
                     .background(.fill.tertiary, in: RoundedRectangle(cornerRadius: 8))
 
@@ -540,6 +542,7 @@ enum ChartRange: String, CaseIterable, Identifiable {
 
 // MARK: - Body Stepper Input
 
+/// Thin wrapper to preserve existing BodyStepperInput call sites.
 private struct BodyStepperInput: View {
     @Binding var value: Double
     let step: Double
@@ -550,50 +553,17 @@ private struct BodyStepperInput: View {
     @State private var textValue = ""
 
     var body: some View {
-        HStack(spacing: 4) {
-            Button {
-                value = max(range.lowerBound, value - step)
-            } label: {
-                Image(systemName: "minus")
-                    .font(.caption2.bold())
-                    .frame(width: 36, height: 36)
-                    .background(.fill.tertiary, in: RoundedRectangle(cornerRadius: 8))
-            }
-            .buttonStyle(.plain)
-
-            if isEditing {
-                TextField("", text: $textValue)
-                    .keyboardType(.decimalPad)
-                    .font(.subheadline.monospacedDigit().bold())
-                    .multilineTextAlignment(.center)
-                    .frame(minWidth: 70)
-                    .focused($isEditing)
-                    .onSubmit { commitEdit() }
-                    .onChange(of: isEditing) {
-                        if !isEditing { commitEdit() }
-                    }
-            } else {
-                Text(String(format: format, value))
-                    .font(.subheadline.monospacedDigit().bold())
-                    .frame(minWidth: 70)
-                    .multilineTextAlignment(.center)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        textValue = String(format: format, value)
-                        isEditing = true
-                    }
-            }
-
-            Button {
-                value = min(range.upperBound, value + step)
-            } label: {
-                Image(systemName: "plus")
-                    .font(.caption2.bold())
-                    .frame(width: 36, height: 36)
-                    .background(.fill.tertiary, in: RoundedRectangle(cornerRadius: 8))
-            }
-            .buttonStyle(.plain)
-        }
+        TappableStepperInput(
+            value: $value,
+            step: step,
+            range: range,
+            format: format,
+            minWidth: 70,
+            buttonSize: 36,
+            buttonHeight: 36,
+            spacing: 4,
+            cornerRadius: 8
+        )
     }
 
     private func commitEdit() {
