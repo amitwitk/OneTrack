@@ -47,7 +47,14 @@ struct TappableStepperInput: View {
                     .focused($isEditing)
                     .opacity(isEditing ? 1 : 0)
                     .onChange(of: isEditing) {
-                        if !isEditing { commitEdit() }
+                        if isEditing {
+                            // Select all text so typing replaces the value
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                UIApplication.shared.sendAction(#selector(UIResponder.selectAll(_:)), to: nil, from: nil, for: nil)
+                            }
+                        } else {
+                            commitEdit()
+                        }
                     }
 
                 // Display text (hidden when editing)

@@ -368,9 +368,32 @@ struct BodyTabView: View {
             }
 
             Spacer()
+
+            if entry.source == "manual" {
+                Image(systemName: "trash")
+                    .font(.caption2)
+                    .foregroundStyle(.red.opacity(0.5))
+                    .onTapGesture {
+                        deleteWeightEntry(entry)
+                    }
+            }
         }
         .padding(.horizontal)
         .padding(.vertical, 10)
+        .contextMenu {
+            if entry.source == "manual" {
+                Button(role: .destructive) {
+                    deleteWeightEntry(entry)
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
+        }
+    }
+
+    private func deleteWeightEntry(_ entry: WeightEntry) {
+        modelContext.delete(entry)
+        try? modelContext.save()
     }
 
     // MARK: - Recent Measurements (collapsible)
@@ -430,9 +453,28 @@ struct BodyTabView: View {
             }
 
             Spacer()
+
+            Image(systemName: "trash")
+                .font(.caption2)
+                .foregroundStyle(.red.opacity(0.5))
+                .onTapGesture {
+                    deleteMeasurement(m)
+                }
         }
         .padding(.horizontal)
         .padding(.vertical, 10)
+        .contextMenu {
+            Button(role: .destructive) {
+                deleteMeasurement(m)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+    }
+
+    private func deleteMeasurement(_ m: BodyMeasurement) {
+        modelContext.delete(m)
+        try? modelContext.save()
     }
 
     // MARK: - Actions
@@ -549,26 +591,17 @@ private struct BodyStepperInput: View {
     let range: ClosedRange<Double>
     let format: String
 
-    @FocusState private var isEditing: Bool
-    @State private var textValue = ""
-
     var body: some View {
         TappableStepperInput(
             value: $value,
             step: step,
             range: range,
             format: format,
-            minWidth: 70,
-            buttonSize: 36,
-            buttonHeight: 36,
-            spacing: 4,
-            cornerRadius: 8
+            minWidth: 56,
+            buttonSize: 30,
+            buttonHeight: 30,
+            spacing: 2,
+            cornerRadius: 6
         )
-    }
-
-    private func commitEdit() {
-        if let parsed = Double(textValue) {
-            value = min(range.upperBound, max(range.lowerBound, parsed))
-        }
     }
 }
