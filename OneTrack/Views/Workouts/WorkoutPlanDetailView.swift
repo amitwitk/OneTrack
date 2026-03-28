@@ -2,33 +2,14 @@ import SwiftUI
 import SwiftData
 
 struct WorkoutPlanDetailView: View {
-    let plan: WorkoutPlan
+    @Bindable var plan: WorkoutPlan
     @Environment(\.modelContext) private var modelContext
     @Environment(\.editMode) private var editMode
     @State private var exerciseToEdit: Exercise?
-
-    private var sortedExercises: [Exercise] {
-        plan.exercises.sorted { $0.sortOrder < $1.sortOrder }
-    }
-
-    private var sections: [(String, [Exercise])] {
-        let grouped = Dictionary(grouping: sortedExercises, by: \.section)
-        var sectionOrder: [String] = []
-        for exercise in sortedExercises {
-            if !sectionOrder.contains(exercise.section) {
-                sectionOrder.append(exercise.section)
-            }
-        }
-        // Include known empty groups
-        for group in plan.knownGroups {
-            if !sectionOrder.contains(group) {
-                sectionOrder.append(group)
-            }
-        }
-        return sectionOrder.map { section in
-            (section, grouped[section] ?? [])
-        }
-    }
+    @State private var showAddGroup = false
+    @State private var newGroupName = ""
+    @State private var showExercisePicker = false
+    @State private var flatList: [PlanListItem] = []
 
     private var completedSessions: [WorkoutSession] {
         plan.sessions.filter(\.isCompleted).sorted { $0.date > $1.date }
@@ -36,49 +17,35 @@ struct WorkoutPlanDetailView: View {
 
     var body: some View {
         List {
-            ForEach(sections, id: \.0) { sectionName, exercises in
-                Section {
-                    if exercises.isEmpty {
-                        Text("No exercises")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                    } else {
-                        ForEach(exercises) { exercise in
-                            exerciseRow(exercise)
-                        }
-                        .onMove { from, to in
-                            PlanManagement.reorderExercises(
-                                allExercises: Array(plan.exercises),
-                                inSection: sectionName,
-                                from: from,
-                                to: to
-                            )
-                            try? modelContext.save()
-                        }
-                        .onDelete { offsets in
-                            let toDelete = PlanManagement.deleteExercises(
-                                allExercises: Array(plan.exercises),
-                                inSection: sectionName,
-                                at: offsets
-                            )
-                            for exercise in toDelete {
-                                modelContext.delete(exercise)
-                            }
-                            try? modelContext.save()
-                        }
-                    }
-                } header: {
-                    if sectionName.isEmpty {
-                        Text("Exercises")
-                    } else {
-                        Text(sectionName)
+            // Flat list of headers + exercises
+            Section {
+                ForEach(flatList) { item in
+                    switch item {
+                    case .sectionHeader(let name):
+                        sectionHeaderRow(name)
+                            .moveDisabled(true)
+                            .deleteDisabled(true)
+                    case .exercise(let exercise):
+                        exerciseRow(exercise)
                     }
                 }
+                .onMove(perform: moveItems)
+                .onDelete(perform: deleteItems)
             }
 
-            // Add group
+            // Actions
             Section {
-                addGroupButton
+                Button {
+                    showExercisePicker = true
+                } label: {
+                    Label("Add Exercise", systemImage: "plus.circle.fill")
+                }
+
+                Button {
+                    showAddGroup = true
+                } label: {
+                    Label("Add Group", systemImage: "folder.badge.plus")
+                }
             }
 
             // Stats
@@ -94,7 +61,7 @@ struct WorkoutPlanDetailView: View {
                 }
             }
 
-            // Recent sessions
+            // Recent history
             if !completedSessions.isEmpty {
                 Section("Recent Sessions") {
                     ForEach(completedSessions.prefix(5)) { session in
@@ -126,14 +93,45 @@ struct WorkoutPlanDetailView: View {
                 EditButton()
             }
         }
+        .onAppear { rebuildFlatList() }
+        .onChange(of: plan.exercises.count) { rebuildFlatList() }
         .sheet(item: $exerciseToEdit) { exercise in
             NavigationStack {
-                EditExerciseView(exercise: exercise, knownGroups: plan.knownGroups)
+                EditExerciseView(exercise: exercise, plan: plan)
             }
+            .onDisappear { rebuildFlatList() }
+        }
+        .sheet(isPresented: $showExercisePicker) {
+            ExercisePickerView { templates in
+                addExercises(templates)
+            }
+        }
+        .alert("New Group", isPresented: $showAddGroup) {
+            TextField("Group name", text: $newGroupName)
+            Button("Cancel", role: .cancel) { newGroupName = "" }
+            Button("Add") {
+                addGroup(newGroupName.trimmingCharacters(in: .whitespaces))
+                newGroupName = ""
+            }
+        } message: {
+            Text("Enter a name for the exercise group")
         }
     }
 
-    // MARK: - Exercise Row
+    // MARK: - Rows
+
+    private func sectionHeaderRow(_ name: String) -> some View {
+        HStack {
+            Image(systemName: "folder.fill")
+                .font(.caption)
+                .foregroundStyle(.blue)
+            Text(name.isEmpty ? "Exercises" : name)
+                .font(.subheadline.bold())
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .listRowBackground(Color(.systemGroupedBackground))
+    }
 
     private func exerciseRow(_ exercise: Exercise) -> some View {
         Button {
@@ -153,35 +151,74 @@ struct WorkoutPlanDetailView: View {
         }
     }
 
-    // MARK: - Add Group
+    // MARK: - Actions
 
-    @State private var showAddGroup = false
-    @State private var newGroupName = ""
+    private func rebuildFlatList() {
+        flatList = PlanManagement.buildFlatList(
+            exercises: Array(plan.exercises),
+            knownGroups: plan.knownGroups
+        )
+    }
 
-    private var addGroupButton: some View {
-        Button {
-            showAddGroup = true
-        } label: {
-            Label("Add Group", systemImage: "folder.badge.plus")
+    private func moveItems(from source: IndexSet, to destination: Int) {
+        PlanManagement.applyMove(flatList: &flatList, from: source, to: destination)
+        // Sync knownGroups from current headers
+        plan.knownGroups = flatList.compactMap {
+            if case .sectionHeader(let name) = $0 { return name }
+            return nil
         }
-        .alert("New Group", isPresented: $showAddGroup) {
-            TextField("Group name", text: $newGroupName)
-            Button("Cancel", role: .cancel) { newGroupName = "" }
-            Button("Add") {
-                let trimmed = newGroupName.trimmingCharacters(in: .whitespaces)
-                if !trimmed.isEmpty {
-                    var groups = plan.knownGroups
-                    if !groups.contains(trimmed) {
-                        groups.append(trimmed)
-                        plan.knownGroups = groups
-                        try? modelContext.save()
-                    }
-                }
-                newGroupName = ""
+        try? modelContext.save()
+    }
+
+    private func deleteItems(at offsets: IndexSet) {
+        for index in offsets {
+            if case .exercise(let exercise) = flatList[index] {
+                modelContext.delete(exercise)
             }
-        } message: {
-            Text("Enter a name for the exercise group")
         }
+        flatList.remove(atOffsets: offsets)
+        PlanManagement.reassignSectionsAndOrder(flatList: flatList)
+        try? modelContext.save()
+    }
+
+    private func addExercises(_ templates: [ExerciseTemplate]) {
+        let maxOrder = plan.exercises.map(\.sortOrder).max() ?? -1
+        // Determine which section to add to (last non-empty section, or "")
+        let lastSection = flatList.reversed().first(where: {
+            if case .sectionHeader = $0 { return true }
+            return false
+        })
+        let section: String
+        if case .sectionHeader(let name) = lastSection {
+            section = name
+        } else {
+            section = ""
+        }
+
+        for (i, template) in templates.enumerated() {
+            let exercise = Exercise(
+                name: template.name,
+                targetSets: template.defaultSets,
+                targetReps: template.defaultReps,
+                sortOrder: maxOrder + 1 + i,
+                isIsometric: template.isIsometric,
+                targetSeconds: template.defaultSeconds,
+                section: section
+            )
+            exercise.plan = plan
+            modelContext.insert(exercise)
+        }
+        try? modelContext.save()
+        rebuildFlatList()
+    }
+
+    private func addGroup(_ name: String) {
+        guard !name.isEmpty else { return }
+        if !plan.knownGroups.contains(name) {
+            plan.knownGroups.append(name)
+        }
+        try? modelContext.save()
+        rebuildFlatList()
     }
 }
 
@@ -189,15 +226,20 @@ struct WorkoutPlanDetailView: View {
 
 struct EditExerciseView: View {
     @Bindable var exercise: Exercise
+    let plan: WorkoutPlan
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    let knownGroups: [String]
+
+    @State private var customGroupName = ""
 
     private var availableSections: [String] {
-        guard let plan = exercise.plan else { return knownGroups }
-        let usedSections = Set(plan.exercises.map(\.section))
-        let all = Set(knownGroups).union(usedSections)
-        return all.sorted()
+        var sections = Set(plan.exercises.map(\.section))
+        for group in plan.knownGroups {
+            sections.insert(group)
+        }
+        var result = sections.sorted()
+        if !result.contains("") { result.insert("", at: 0) }
+        return result
     }
 
     var body: some View {
@@ -208,15 +250,25 @@ struct EditExerciseView: View {
             }
 
             Section("Group") {
-                TextField("Group name (optional)", text: $exercise.section)
-                if !availableSections.filter({ !$0.isEmpty }).isEmpty {
-                    Picker("Existing groups", selection: $exercise.section) {
-                        Text("None").tag("")
-                        ForEach(availableSections.filter { !$0.isEmpty }, id: \.self) { section in
-                            Text(section).tag(section)
-                        }
+                Picker("Group", selection: $exercise.section) {
+                    Text("None").tag("")
+                    ForEach(availableSections.filter { !$0.isEmpty }, id: \.self) { section in
+                        Text(section).tag(section)
                     }
-                    .pickerStyle(.menu)
+                }
+
+                HStack {
+                    TextField("New group name", text: $customGroupName)
+                    Button("Set") {
+                        let name = customGroupName.trimmingCharacters(in: .whitespaces)
+                        guard !name.isEmpty else { return }
+                        exercise.section = name
+                        if !plan.knownGroups.contains(name) {
+                            plan.knownGroups.append(name)
+                        }
+                        customGroupName = ""
+                    }
+                    .disabled(customGroupName.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
 

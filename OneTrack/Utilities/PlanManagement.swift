@@ -1,60 +1,31 @@
 import Foundation
 
-/// Testable utility functions for workout plan management operations.
-struct PlanManagement {
+/// Tagged item for a flat list representation of a workout plan.
+enum PlanListItem: Identifiable, Equatable {
+    case sectionHeader(String)
+    case exercise(Exercise)
 
-    /// Reorders exercises within a section by applying an IndexSet move, then recalculates
-    /// sortOrder globally across all sections to maintain consistent ordering.
-    ///
-    /// - Parameters:
-    ///   - exercises: All exercises in the plan (will be mutated in place via reference)
-    ///   - sectionName: The section in which the move is occurring
-    ///   - from: Source indices (relative to the section)
-    ///   - to: Destination index (relative to the section)
-    static func reorderExercises(
-        allExercises: [Exercise],
-        inSection sectionName: String,
-        from: IndexSet,
-        to: Int
-    ) {
-        let sorted = allExercises.sorted { $0.sortOrder < $1.sortOrder }
-
-        // Build ordered sections
-        var sectionOrder: [String] = []
-        for exercise in sorted {
-            if !sectionOrder.contains(exercise.section) {
-                sectionOrder.append(exercise.section)
-            }
-        }
-
-        // Group by section preserving order
-        var grouped: [String: [Exercise]] = [:]
-        for exercise in sorted {
-            grouped[exercise.section, default: []].append(exercise)
-        }
-
-        // Apply the move in the target section
-        if var sectionExercises = grouped[sectionName] {
-            sectionExercises.move(fromOffsets: from, toOffset: to)
-            grouped[sectionName] = sectionExercises
-        }
-
-        // Recalculate sort orders globally
-        var order = 0
-        for section in sectionOrder {
-            for exercise in grouped[section] ?? [] {
-                exercise.sortOrder = order
-                order += 1
-            }
+    var id: String {
+        switch self {
+        case .sectionHeader(let name): return "header-\(name)"
+        case .exercise(let ex): return ex.persistentModelID.hashValue.description
         }
     }
 
-    /// Moves an exercise to a different section, placing it at the end of the target section.
-    static func moveExerciseToSection(_ exercise: Exercise, newSection: String, allExercises: [Exercise]) {
-        exercise.section = newSection
+    static func == (lhs: PlanListItem, rhs: PlanListItem) -> Bool {
+        lhs.id == rhs.id
+    }
+}
 
-        // Recalculate sort orders: exercises keep their relative order within sections
-        let sorted = allExercises.sorted { $0.sortOrder < $1.sortOrder }
+struct PlanManagement {
+
+    /// Builds a flat list of headers and exercises from sorted exercises.
+    /// Headers appear based on section changes in sortOrder.
+    /// Empty groups (from knownGroups) are included as standalone headers.
+    static func buildFlatList(exercises: [Exercise], knownGroups: [String] = []) -> [PlanListItem] {
+        let sorted = exercises.sorted { $0.sortOrder < $1.sortOrder }
+
+        // Collect section order from exercises
         var sectionOrder: [String] = []
         for ex in sorted {
             if !sectionOrder.contains(ex.section) {
@@ -62,57 +33,81 @@ struct PlanManagement {
             }
         }
 
-        var order = 0
+        // Add known groups that aren't already represented
+        for group in knownGroups {
+            if !sectionOrder.contains(group) {
+                sectionOrder.append(group)
+            }
+        }
+
+        // Group exercises by section
+        let grouped = Dictionary(grouping: sorted, by: \.section)
+
+        var result: [PlanListItem] = []
         for section in sectionOrder {
-            let sectionExercises = sorted.filter { $0.section == section }
-            for ex in sectionExercises {
-                ex.sortOrder = order
-                order += 1
+            result.append(.sectionHeader(section))
+            if let exercises = grouped[section] {
+                for ex in exercises {
+                    result.append(.exercise(ex))
+                }
+            }
+        }
+        return result
+    }
+
+    /// After a flat list move, determines which section each exercise belongs to
+    /// by scanning backwards to find the nearest header.
+    /// Returns the updated section assignments and recalculates sortOrder.
+    static func applyMove(flatList: inout [PlanListItem], from: IndexSet, to: Int) {
+        flatList.move(fromOffsets: from, toOffset: to)
+        reassignSectionsAndOrder(flatList: flatList)
+    }
+
+    /// Reassigns section and sortOrder to all exercises based on their position
+    /// relative to headers in the flat list.
+    static func reassignSectionsAndOrder(flatList: [PlanListItem]) {
+        var currentSection = ""
+        var exerciseOrder = 0
+        for item in flatList {
+            switch item {
+            case .sectionHeader(let name):
+                currentSection = name
+            case .exercise(let ex):
+                ex.section = currentSection
+                ex.sortOrder = exerciseOrder
+                exerciseOrder += 1
             }
         }
     }
 
-    /// Deletes exercises at the given indices within a section, then recalculates sort order.
-    static func deleteExercises(
-        allExercises: [Exercise],
-        inSection sectionName: String,
-        at offsets: IndexSet
-    ) -> [Exercise] {
-        let sorted = allExercises.sorted { $0.sortOrder < $1.sortOrder }
-        let sectionExercises = sorted.filter { $0.section == sectionName }
-        let toDelete = offsets.map { sectionExercises[$0] }
-
-        // Recalculate sort orders for remaining exercises
-        let remaining = sorted.filter { !toDelete.contains($0) }
-        for (index, exercise) in remaining.enumerated() {
-            exercise.sortOrder = index
+    /// Finds the section name for an item at a given index by scanning backwards.
+    static func sectionForIndex(_ index: Int, in flatList: [PlanListItem]) -> String {
+        for i in stride(from: index, through: 0, by: -1) {
+            if case .sectionHeader(let name) = flatList[i] {
+                return name
+            }
         }
-
-        return toDelete
+        return ""
     }
 
-    /// Reorders plans by applying an IndexSet move and recalculating sortOrder.
-    static func reorderPlans(_ plans: inout [WorkoutPlan], from: IndexSet, to: Int) {
-        plans.move(fromOffsets: from, toOffset: to)
-        for (index, plan) in plans.enumerated() {
-            plan.sortOrder = index
+    /// Deletes an exercise from the flat list and the plan.
+    static func deleteExercise(_ exercise: Exercise) {
+        exercise.plan?.exercises.removeAll { $0.id == exercise.id }
+    }
+
+    /// Renumbers sortOrder for all exercises in a plan based on current flat list order.
+    static func renumberSortOrder(exercises: [Exercise]) {
+        let sorted = exercises.sorted { $0.sortOrder < $1.sortOrder }
+        for (index, ex) in sorted.enumerated() {
+            ex.sortOrder = index
         }
     }
 
     /// Deletes a set from an exercise log and renumbers remaining sets.
-    static func deleteSet(_ setLog: SetLog, from exerciseLog: ExerciseLog) {
-        let remaining = exerciseLog.sets
-            .filter { $0.id != setLog.id }
-            .sorted { $0.setNumber < $1.setNumber }
-        for (index, s) in remaining.enumerated() {
-            s.setNumber = index + 1
+    static func deleteSet(_ setLog: SetLog, from log: ExerciseLog) {
+        let deletedNumber = setLog.setNumber
+        for remainingSet in log.sets where remainingSet.setNumber > deletedNumber {
+            remainingSet.setNumber -= 1
         }
-    }
-}
-
-// Exercise needs Equatable conformance for contains() — @Model provides identity via id
-extension Exercise: Equatable {
-    static func == (lhs: Exercise, rhs: Exercise) -> Bool {
-        lhs.id == rhs.id
     }
 }
