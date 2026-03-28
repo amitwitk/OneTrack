@@ -33,6 +33,9 @@ struct BodyTabView: View {
 
     // HealthKit
     @State private var showHealthKitDenied = false
+    @State private var isSyncing = false
+    @State private var syncCount = 0
+    @State private var showSyncResult = false
 
     private var currentWeight: Double? {
         BodyCalculations.currentWeight(entries: weightEntries)
@@ -66,10 +69,23 @@ struct BodyTabView: View {
             .background(Color(.systemGroupedBackground))
             .navigationTitle("Body")
         }
+        .task {
+            await initialSync()
+        }
+        .onDisappear {
+            healthKitManager.stopObservingWeightChanges()
+        }
         .alert("HealthKit Access Denied", isPresented: $showHealthKitDenied) {
             Button("OK", role: .cancel) {}
         } message: {
             Text("Please enable Health access in Settings > Privacy > Health > OneTrack.")
+        }
+        .alert("Sync Complete", isPresented: $showSyncResult) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(syncCount > 0
+                 ? "Imported \(syncCount) weight \(syncCount == 1 ? "entry" : "entries") from Health."
+                 : "All weight entries are already up to date.")
         }
     }
 
@@ -214,14 +230,22 @@ struct BodyTabView: View {
                         Button {
                             Task { await importFromHealthKit() }
                         } label: {
-                            Label("Import from Health", systemImage: "heart.fill")
-                                .font(.subheadline.bold())
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .foregroundStyle(.white)
-                                .background(.pink, in: RoundedRectangle(cornerRadius: 12))
+                            Group {
+                                if isSyncing {
+                                    ProgressView()
+                                        .tint(.white)
+                                } else {
+                                    Label("Sync from Health", systemImage: "heart.fill")
+                                }
+                            }
+                            .font(.subheadline.bold())
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .foregroundStyle(.white)
+                            .background(.pink, in: RoundedRectangle(cornerRadius: 12))
                         }
                         .buttonStyle(.plain)
+                        .disabled(isSyncing)
                     }
                 }
             }
@@ -431,7 +455,35 @@ struct BodyTabView: View {
         let entry = WeightEntry(date: .now, weightKg: weightValue, source: weightSource)
         modelContext.insert(entry)
         try? modelContext.save()
+
+        // Write manual entries to HealthKit if authorized
+        if weightSource == "manual" && healthKitManager.isAuthorized {
+            Task {
+                try? await healthKitManager.saveWeight(weightKg: weightValue)
+            }
+        }
+
         weightSource = "manual"
+    }
+
+    private func initialSync() async {
+        guard healthKitManager.isAvailable else { return }
+
+        if !healthKitManager.isAuthorized {
+            await healthKitManager.requestAuthorization()
+        }
+
+        guard healthKitManager.isAuthorized else { return }
+
+        // Incremental sync on appear
+        let newSamples = await healthKitManager.fetchNewWeightSamples()
+        importSamples(newSamples)
+
+        // Set up observer for real-time updates
+        healthKitManager.onNewWeightSamples = { [self] samples in
+            self.importSamples(samples)
+        }
+        healthKitManager.startObservingWeightChanges()
     }
 
     private func importFromHealthKit() async {
@@ -444,11 +496,46 @@ struct BodyTabView: View {
             return
         }
 
-        await healthKitManager.fetchAll()
+        isSyncing = true
 
+        // Full historical import
+        let allSamples = await healthKitManager.fetchAllWeightHistory()
+        let toImport = BodyCalculations.samplesToImport(
+            samples: allSamples,
+            existingEntries: weightEntries
+        )
+
+        for sample in toImport {
+            let values = BodyCalculations.weightEntryValues(from: sample)
+            let entry = WeightEntry(date: values.date, weightKg: values.weightKg, source: values.source)
+            modelContext.insert(entry)
+        }
+        try? modelContext.save()
+
+        syncCount = toImport.count
+        isSyncing = false
+        showSyncResult = true
+
+        // Also update latest weight display
+        await healthKitManager.fetchAll()
         if let hkWeight = healthKitManager.latestWeight {
             weightValue = (hkWeight * 10).rounded() / 10
-            weightSource = "healthkit"
+        }
+    }
+
+    /// Imports a batch of WeightSamples into SwiftData after deduplication.
+    private func importSamples(_ samples: [WeightSample]) {
+        let toImport = BodyCalculations.samplesToImport(
+            samples: samples,
+            existingEntries: weightEntries
+        )
+        for sample in toImport {
+            let values = BodyCalculations.weightEntryValues(from: sample)
+            let entry = WeightEntry(date: values.date, weightKg: values.weightKg, source: values.source)
+            modelContext.insert(entry)
+        }
+        if !toImport.isEmpty {
+            try? modelContext.save()
         }
     }
 

@@ -1,6 +1,41 @@
 import Foundation
 
+/// Lightweight transfer object for weight data from HealthKit.
+/// Keeps HealthKit types out of the model layer.
+struct WeightSample: Equatable, Sendable {
+    let date: Date
+    let weightKg: Double
+    let source: String // "healthkit" or "onetrack"
+}
+
 struct BodyCalculations {
+
+    // MARK: - HealthKit Sync Helpers
+
+    /// Determines which HealthKit samples are new and should be imported.
+    /// Deduplicates by checking if a WeightEntry with the same date (within tolerance) and weight already exists.
+    static func samplesToImport(
+        samples: [WeightSample],
+        existingEntries: [WeightEntry],
+        dateTolerance: TimeInterval = 60
+    ) -> [WeightSample] {
+        samples.filter { sample in
+            // Skip samples that OneTrack itself wrote
+            guard sample.source != "onetrack" else { return false }
+
+            // Check for existing entry with same date (within tolerance) and weight
+            let isDuplicate = existingEntries.contains { entry in
+                abs(entry.date.timeIntervalSince(sample.date)) < dateTolerance
+                    && abs(entry.weightKg - sample.weightKg) < 0.01
+            }
+            return !isDuplicate
+        }
+    }
+
+    /// Converts a WeightSample to WeightEntry values (does not create the model object).
+    static func weightEntryValues(from sample: WeightSample) -> (date: Date, weightKg: Double, source: String) {
+        (date: sample.date, weightKg: sample.weightKg, source: "healthkit")
+    }
     static func currentWeight(entries: [WeightEntry]) -> Double? {
         entries.max(by: { $0.date < $1.date })?.weightKg
     }
