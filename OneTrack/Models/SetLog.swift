@@ -15,6 +15,7 @@ final class SetLog {
     var seconds: Int = 0
     var weightKg: Double = 0
     var isCompleted: Bool = false
+    var isPersonalRecord: Bool = false
     var setTypeRaw: String = SetType.normal.rawValue
     var exerciseLog: ExerciseLog?
 

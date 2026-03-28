@@ -8,16 +8,18 @@ final class Exercise {
     var targetReps: Int = 10
     var isIsometric: Bool = false
     var targetSeconds: Int = 30
+    var restSeconds: Int?
     var section: String = ""
     var sortOrder: Int = 0
     var plan: WorkoutPlan?
 
-    init(name: String, targetSets: Int, targetReps: Int, sortOrder: Int, isIsometric: Bool = false, targetSeconds: Int = 30, section: String = "") {
+    init(name: String, targetSets: Int, targetReps: Int, sortOrder: Int, isIsometric: Bool = false, targetSeconds: Int = 30, restSeconds: Int? = nil, section: String = "") {
         self.name = name
         self.targetSets = targetSets
         self.targetReps = targetReps
         self.isIsometric = isIsometric
         self.targetSeconds = targetSeconds
+        self.restSeconds = restSeconds
         self.sortOrder = sortOrder
         self.section = section
     }

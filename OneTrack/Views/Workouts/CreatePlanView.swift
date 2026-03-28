@@ -17,7 +17,7 @@ struct CreatePlanView: View {
             _planName = State(initialValue: plan.name)
             _exercises = State(initialValue: plan.exercises
                 .sorted { $0.sortOrder < $1.sortOrder }
-                .map { EditableExercise(name: $0.name, sets: $0.targetSets, reps: $0.targetReps, isIsometric: $0.isIsometric, seconds: $0.targetSeconds, section: $0.section) }
+                .map { EditableExercise(name: $0.name, sets: $0.targetSets, reps: $0.targetReps, isIsometric: $0.isIsometric, seconds: $0.targetSeconds, restSeconds: $0.restSeconds, section: $0.section) }
             )
         }
     }
@@ -106,30 +106,83 @@ struct CreatePlanView: View {
     }
 
     private func exerciseRow(_ exercise: EditableExercise, index: Int) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: "line.3.horizontal")
-                .foregroundStyle(.tertiary)
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Image(systemName: "line.3.horizontal")
+                    .foregroundStyle(.tertiary)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(exercise.name)
-                    .font(.subheadline.bold())
-                Text(exercise.isIsometric
-                    ? "\(exercise.sets) sets x \(exercise.seconds)s"
-                    : "\(exercise.sets) sets x \(exercise.reps) reps")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(exercise.name)
+                        .font(.subheadline.bold())
+                    HStack(spacing: 8) {
+                        Text(exercise.isIsometric
+                            ? "\(exercise.sets) sets x \(exercise.seconds)s"
+                            : "\(exercise.sets) sets x \(exercise.reps) reps")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        if let rest = exercise.restSeconds {
+                            Text("Rest: \(rest)s")
+                                .font(.caption2)
+                                .foregroundStyle(.blue)
+                        }
+                    }
+                }
+
+                Spacer()
+
+                // Quick set/rep adjustment
+                HStack(spacing: 16) {
+                    Stepper("", value: Binding(
+                        get: { exercises[index].sets },
+                        set: { exercises[index].sets = $0 }
+                    ), in: 1...10)
+                    .labelsHidden()
+                    .scaleEffect(0.8)
+                }
             }
 
-            Spacer()
-
-            // Quick set/rep adjustment
-            HStack(spacing: 16) {
-                Stepper("", value: Binding(
-                    get: { exercises[index].sets },
-                    set: { exercises[index].sets = $0 }
-                ), in: 1...10)
-                .labelsHidden()
-                .scaleEffect(0.8)
+            // Rest timer override
+            if exercise.showRestOverride {
+                HStack(spacing: 8) {
+                    Text("Rest")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Stepper(
+                        "\(exercises[index].restSeconds ?? 90)s",
+                        value: Binding(
+                            get: { exercises[index].restSeconds ?? 90 },
+                            set: { exercises[index].restSeconds = $0 }
+                        ),
+                        in: 15...300,
+                        step: 15
+                    )
+                    .font(.caption)
+                    Button {
+                        exercises[index].restSeconds = nil
+                        exercises[index].showRestOverride = false
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.top, 6)
+                .padding(.leading, 28)
+            } else {
+                Button {
+                    exercises[index].showRestOverride = true
+                    if exercises[index].restSeconds == nil {
+                        exercises[index].restSeconds = 90
+                    }
+                } label: {
+                    Label("Set rest timer", systemImage: "timer")
+                        .font(.caption2)
+                        .foregroundStyle(.blue)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 4)
+                .padding(.leading, 28)
             }
         }
     }
@@ -144,7 +197,7 @@ struct CreatePlanView: View {
             }
             // Add new
             for (index, ex) in exercises.enumerated() {
-                let exercise = Exercise(name: ex.name, targetSets: ex.sets, targetReps: ex.reps, sortOrder: index, isIsometric: ex.isIsometric, targetSeconds: ex.seconds, section: ex.section)
+                let exercise = Exercise(name: ex.name, targetSets: ex.sets, targetReps: ex.reps, sortOrder: index, isIsometric: ex.isIsometric, targetSeconds: ex.seconds, restSeconds: ex.restSeconds, section: ex.section)
                 exercise.plan = plan
                 modelContext.insert(exercise)
             }
@@ -161,7 +214,7 @@ struct CreatePlanView: View {
             modelContext.insert(plan)
 
             for (index, ex) in exercises.enumerated() {
-                let exercise = Exercise(name: ex.name, targetSets: ex.sets, targetReps: ex.reps, sortOrder: index, isIsometric: ex.isIsometric, targetSeconds: ex.seconds, section: ex.section)
+                let exercise = Exercise(name: ex.name, targetSets: ex.sets, targetReps: ex.reps, sortOrder: index, isIsometric: ex.isIsometric, targetSeconds: ex.seconds, restSeconds: ex.restSeconds, section: ex.section)
                 exercise.plan = plan
                 modelContext.insert(exercise)
             }
@@ -181,14 +234,18 @@ struct EditableExercise: Identifiable {
     var reps: Int
     var isIsometric: Bool
     var seconds: Int
+    var restSeconds: Int?
+    var showRestOverride: Bool
     var section: String
 
-    init(name: String, sets: Int, reps: Int, isIsometric: Bool = false, seconds: Int = 30, section: String = "") {
+    init(name: String, sets: Int, reps: Int, isIsometric: Bool = false, seconds: Int = 30, restSeconds: Int? = nil, section: String = "") {
         self.name = name
         self.sets = sets
         self.reps = reps
         self.isIsometric = isIsometric
         self.seconds = seconds
+        self.restSeconds = restSeconds
+        self.showRestOverride = restSeconds != nil
         self.section = section
     }
 }
