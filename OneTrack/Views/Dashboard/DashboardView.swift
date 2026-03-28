@@ -1,10 +1,14 @@
 import SwiftUI
 import SwiftData
+import Charts
 
 struct DashboardView: View {
     @Query(filter: #Predicate<WorkoutSession> { $0.isCompleted },
            sort: \WorkoutSession.date, order: .reverse)
     private var recentSessions: [WorkoutSession]
+
+    @Query(sort: \WeightEntry.date, order: .reverse)
+    private var weightEntries: [WeightEntry]
 
     private var thisWeekCount: Int { DashboardCalculations.thisWeekCount(sessions: recentSessions) }
     private var totalVolume: String { DashboardCalculations.totalVolume(sessions: recentSessions) }
@@ -64,6 +68,12 @@ struct DashboardView: View {
                         )
                     }
                     .padding(.horizontal)
+
+                    // Charts
+                    DashboardChartsSection(
+                        sessions: recentSessions,
+                        weightEntries: weightEntries
+                    )
 
                     // Recent Workouts
                     VStack(alignment: .leading, spacing: 12) {
