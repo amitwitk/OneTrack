@@ -495,7 +495,7 @@ private struct ExerciseSectionView: View {
             HStack(spacing: 0) {
                 Text("SET")
                     .frame(width: 36)
-                Text("PREVIOUS")
+                Text("PREV")
                     .frame(maxWidth: .infinity)
                 Text(log.isIsometric ? "SEC" : "REPS")
                     .frame(width: 100)
@@ -832,7 +832,11 @@ private struct StepperInput<V: BinaryFloatingPoint>: View {
             ),
             step: Double(step),
             range: Double(range.lowerBound)...Double(range.upperBound),
-            decimals: decimals
+            decimals: decimals,
+            minWidth: 26,
+            buttonSize: 24,
+            buttonHeight: 28,
+            spacing: 1
         )
     }
 
