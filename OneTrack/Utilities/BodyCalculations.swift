@@ -109,6 +109,65 @@ struct BodyCalculations {
         return points
     }
 
+    // MARK: - BMI
+
+    /// Calculates BMI: weight(kg) / (height(m))²
+    static func bmi(weightKg: Double, heightCm: Double) -> Double {
+        guard heightCm > 0 else { return 0 }
+        let heightM = heightCm / 100.0
+        return weightKg / (heightM * heightM)
+    }
+
+    static func bmiCategory(bmi: Double) -> String {
+        switch bmi {
+        case ..<18.5: "Underweight"
+        case 18.5..<25: "Normal"
+        case 25..<30: "Overweight"
+        default: "Obese"
+        }
+    }
+
+    static func bmiCategoryColor(bmi: Double) -> String {
+        switch bmi {
+        case ..<18.5: "blue"
+        case 18.5..<25: "green"
+        case 25..<30: "yellow"
+        default: "red"
+        }
+    }
+
+    // MARK: - Rate of Change
+
+    /// Calculates weekly rate of weight change in kg/week.
+    /// Requires at least 2 entries spanning 3+ days. Returns nil otherwise.
+    static func weeklyRateOfChange(entries: [WeightEntry], now: Date = .now) -> Double? {
+        guard let latest = entries.max(by: { $0.date < $1.date }) else { return nil }
+
+        // Find earliest entry that's at least 3 days before latest
+        let threeDaysAgo = Calendar.current.date(byAdding: .day, value: -3, to: latest.date) ?? latest.date
+        let earlier = entries
+            .filter { $0.date <= threeDaysAgo }
+            .max(by: { $0.date < $1.date })
+        guard let earlier else { return nil }
+
+        let daysDiff = latest.date.timeIntervalSince(earlier.date) / 86400
+        guard daysDiff >= 3 else { return nil }
+
+        let weightDiff = latest.weightKg - earlier.weightKg
+        return (weightDiff / daysDiff) * 7 // Convert to per-week
+    }
+
+    static func weeklyRateArrow(_ rate: Double) -> String {
+        if abs(rate) < 0.1 { return "→" }
+        return rate > 0 ? "↑" : "↓"
+    }
+
+    static func weeklyRateFormatted(_ rate: Double?) -> String {
+        guard let rate else { return "--" }
+        let sign = rate >= 0 ? "+" : ""
+        return String(format: "%@%.1f kg/wk", sign, rate)
+    }
+
     /// Returns the latest values for each measurement type, used for smart defaults.
     static func latestMeasurementValues(measurements: [BodyMeasurement]) -> (waist: Double?, chest: Double?, leftBicep: Double?, rightBicep: Double?) {
         let sorted = measurements.sorted { $0.date > $1.date }
