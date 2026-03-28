@@ -17,7 +17,7 @@ struct CreatePlanView: View {
             _planName = State(initialValue: plan.name)
             _exercises = State(initialValue: plan.exercises
                 .sorted { $0.sortOrder < $1.sortOrder }
-                .map { EditableExercise(name: $0.name, sets: $0.targetSets, reps: $0.targetReps, isIsometric: $0.isIsometric, seconds: $0.targetSeconds) }
+                .map { EditableExercise(name: $0.name, sets: $0.targetSets, reps: $0.targetReps, isIsometric: $0.isIsometric, seconds: $0.targetSeconds, section: $0.section) }
             )
         }
     }
@@ -144,7 +144,7 @@ struct CreatePlanView: View {
             }
             // Add new
             for (index, ex) in exercises.enumerated() {
-                let exercise = Exercise(name: ex.name, targetSets: ex.sets, targetReps: ex.reps, sortOrder: index, isIsometric: ex.isIsometric, targetSeconds: ex.seconds)
+                let exercise = Exercise(name: ex.name, targetSets: ex.sets, targetReps: ex.reps, sortOrder: index, isIsometric: ex.isIsometric, targetSeconds: ex.seconds, section: ex.section)
                 exercise.plan = plan
                 modelContext.insert(exercise)
             }
@@ -161,7 +161,7 @@ struct CreatePlanView: View {
             modelContext.insert(plan)
 
             for (index, ex) in exercises.enumerated() {
-                let exercise = Exercise(name: ex.name, targetSets: ex.sets, targetReps: ex.reps, sortOrder: index, isIsometric: ex.isIsometric, targetSeconds: ex.seconds)
+                let exercise = Exercise(name: ex.name, targetSets: ex.sets, targetReps: ex.reps, sortOrder: index, isIsometric: ex.isIsometric, targetSeconds: ex.seconds, section: ex.section)
                 exercise.plan = plan
                 modelContext.insert(exercise)
             }
@@ -181,13 +181,15 @@ struct EditableExercise: Identifiable {
     var reps: Int
     var isIsometric: Bool
     var seconds: Int
+    var section: String
 
-    init(name: String, sets: Int, reps: Int, isIsometric: Bool = false, seconds: Int = 30) {
+    init(name: String, sets: Int, reps: Int, isIsometric: Bool = false, seconds: Int = 30, section: String = "") {
         self.name = name
         self.sets = sets
         self.reps = reps
         self.isIsometric = isIsometric
         self.seconds = seconds
+        self.section = section
     }
 }
 

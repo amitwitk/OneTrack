@@ -206,4 +206,41 @@ struct WorkoutPlanParserTests {
         #expect(plans[0].rest == 90)
         #expect(plans[1].rest == 120)
     }
+
+    @Test func parseSections() throws {
+        let input = """
+        ---
+        name: Legs A
+
+        [Activation]
+        - Spanish Squat: 3x45s
+        - Spring Ankle: 3x30s
+
+        [Main Strength]
+        - Leg Press: 4x7
+        - Leg Extension: 3x11
+
+        [Rehab]
+        - TKE's: 3x20
+        """
+        let plans = try WorkoutPlanParser.parse(input)
+        #expect(plans.count == 1)
+        #expect(plans[0].exercises.count == 5)
+        #expect(plans[0].exercises[0].section == "Activation")
+        #expect(plans[0].exercises[1].section == "Activation")
+        #expect(plans[0].exercises[2].section == "Main Strength")
+        #expect(plans[0].exercises[3].section == "Main Strength")
+        #expect(plans[0].exercises[4].section == "Rehab")
+    }
+
+    @Test func parseNoSectionsHaveEmptySection() throws {
+        let input = """
+        ---
+        name: Simple
+
+        - Bench: 4x10
+        """
+        let plans = try WorkoutPlanParser.parse(input)
+        #expect(plans[0].exercises[0].section == "")
+    }
 }
