@@ -80,4 +80,42 @@ struct BodyCalculations {
         if change > 0 { return "red" }
         return "gray"
     }
+
+    // MARK: - Measurement Chart Data
+
+    struct MeasurementChartPoint: Identifiable {
+        let id = UUID()
+        let date: Date
+        let value: Double
+        let type: String
+    }
+
+    /// Extracts chart data from body measurements. Returns data points for each non-nil measurement type.
+    static func measurementChartData(
+        measurements: [BodyMeasurement],
+        limit: Int = 20
+    ) -> [MeasurementChartPoint] {
+        let sorted = measurements
+            .sorted { $0.date < $1.date }
+            .suffix(limit)
+
+        var points: [MeasurementChartPoint] = []
+        for m in sorted {
+            if let v = m.waistCm { points.append(MeasurementChartPoint(date: m.date, value: v, type: "Waist")) }
+            if let v = m.chestCm { points.append(MeasurementChartPoint(date: m.date, value: v, type: "Chest")) }
+            if let v = m.leftBicepCm { points.append(MeasurementChartPoint(date: m.date, value: v, type: "L. Bicep")) }
+            if let v = m.rightBicepCm { points.append(MeasurementChartPoint(date: m.date, value: v, type: "R. Bicep")) }
+        }
+        return points
+    }
+
+    /// Returns the latest values for each measurement type, used for smart defaults.
+    static func latestMeasurementValues(measurements: [BodyMeasurement]) -> (waist: Double?, chest: Double?, leftBicep: Double?, rightBicep: Double?) {
+        let sorted = measurements.sorted { $0.date > $1.date }
+        let waist = sorted.first(where: { $0.waistCm != nil })?.waistCm
+        let chest = sorted.first(where: { $0.chestCm != nil })?.chestCm
+        let leftBicep = sorted.first(where: { $0.leftBicepCm != nil })?.leftBicepCm
+        let rightBicep = sorted.first(where: { $0.rightBicepCm != nil })?.rightBicepCm
+        return (waist, chest, leftBicep, rightBicep)
+    }
 }
