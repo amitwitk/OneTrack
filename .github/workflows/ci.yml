@@ -11,7 +11,63 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      workouts: ${{ steps.filter.outputs.workouts }}
+      dashboard: ${{ steps.filter.outputs.dashboard }}
+      nutrition: ${{ steps.filter.outputs.nutrition }}
+      body: ${{ steps.filter.outputs.body }}
+      activity: ${{ steps.filter.outputs.activity }}
+      shared: ${{ steps.filter.outputs.shared }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            workouts:
+              - 'OneTrack/Models/WorkoutPlan.swift'
+              - 'OneTrack/Models/Exercise.swift'
+              - 'OneTrack/Models/WorkoutSession.swift'
+              - 'OneTrack/Models/ExerciseLog.swift'
+              - 'OneTrack/Models/SetLog.swift'
+              - 'OneTrack/Models/CustomExercise.swift'
+              - 'OneTrack/Views/Workouts/**'
+              - 'OneTrack/Utilities/ExerciseDatabase.swift'
+              - 'OneTrack/Utilities/WorkoutPlanParser.swift'
+              - 'OneTrackTests/Workouts/**'
+            dashboard:
+              - 'OneTrack/Views/Dashboard/**'
+              - 'OneTrack/Utilities/DashboardCalculations.swift'
+              - 'OneTrackTests/Dashboard/**'
+            nutrition:
+              - 'OneTrack/Models/MealEntry.swift'
+              - 'OneTrack/Models/Ingredient.swift'
+              - 'OneTrack/Models/FoodItem.swift'
+              - 'OneTrack/Services/USDAFoodService.swift'
+              - 'OneTrack/Views/Nutrition/**'
+              - 'OneTrackTests/Nutrition/**'
+            body:
+              - 'OneTrack/Models/BodyMeasurement.swift'
+              - 'OneTrack/Models/WeightEntry.swift'
+              - 'OneTrack/Views/Body/**'
+              - 'OneTrack/Utilities/WeightFormatting.swift'
+              - 'OneTrackTests/Body/**'
+            activity:
+              - 'OneTrack/Services/HealthKitManager.swift'
+              - 'OneTrack/Views/Activity/**'
+            shared:
+              - 'OneTrack/OneTrackApp.swift'
+              - 'OneTrack/ContentView.swift'
+              - 'OneTrack/Theme/**'
+              - 'OneTrack/Utilities/DateFormatters.swift'
+              - 'OneTrack.xcodeproj/**'
+              - 'OneTrackTests/Helpers/**'
+              - 'OneTrackTests/Shared/**'
+
   build-and-test:
+    needs: detect-changes
     runs-on: macos-15
     timeout-minutes: 20
 
@@ -21,7 +77,55 @@ jobs:
       - name: Select Xcode 16.4
         run: sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
 
-      - name: Build and Test
+      - name: Determine test scope
+        id: scope
+        run: |
+          FILTERS=""
+
+          # If shared/core files changed, or push to main, run all tests
+          if [[ "${{ needs.detect-changes.outputs.shared }}" == "true" ]] || [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "scope=all" >> $GITHUB_OUTPUT
+            echo "Running: ALL tests"
+            exit 0
+          fi
+
+          if [[ "${{ needs.detect-changes.outputs.workouts }}" == "true" ]]; then
+            FILTERS="$FILTERS -only-testing:OneTrackTests/WorkoutPlanParserTests"
+            FILTERS="$FILTERS -only-testing:OneTrackTests/ExerciseDatabaseTests"
+            FILTERS="$FILTERS -only-testing:OneTrackTests/CustomExerciseTests"
+            FILTERS="$FILTERS -only-testing:OneTrackTests/ModelTests"
+          fi
+
+          if [[ "${{ needs.detect-changes.outputs.dashboard }}" == "true" ]]; then
+            FILTERS="$FILTERS -only-testing:OneTrackTests/DashboardCalculationsTests"
+          fi
+
+          if [[ "${{ needs.detect-changes.outputs.nutrition }}" == "true" ]]; then
+            FILTERS="$FILTERS -only-testing:OneTrackTests/USDAFoodServiceTests"
+          fi
+
+          if [[ "${{ needs.detect-changes.outputs.body }}" == "true" ]]; then
+            FILTERS="$FILTERS -only-testing:OneTrackTests/BodyCalculationsTests"
+            FILTERS="$FILTERS -only-testing:OneTrackTests/WeightFormattingTests"
+          fi
+
+          # Always include shared tests if any domain changed
+          if [[ -n "$FILTERS" ]]; then
+            FILTERS="$FILTERS -only-testing:OneTrackTests/DateFormattersTests"
+          fi
+
+          # If no test-relevant files changed, still build but skip tests
+          if [[ -z "$FILTERS" ]]; then
+            echo "scope=build-only" >> $GITHUB_OUTPUT
+            echo "Running: BUILD ONLY (no test-relevant changes)"
+          else
+            echo "scope=filtered" >> $GITHUB_OUTPUT
+            echo "filters=$FILTERS" >> $GITHUB_OUTPUT
+            echo "Running: $FILTERS"
+          fi
+
+      - name: Build and Test (all)
+        if: steps.scope.outputs.scope == 'all'
         run: |
           xcodebuild test \
             -project OneTrack.xcodeproj \
@@ -30,10 +134,23 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             | xcpretty --color
 
-      - name: Upload Test Results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: TestResults
-          path: TestResults.xcresult
-          if-no-files-found: ignore
+      - name: Build and Test (filtered)
+        if: steps.scope.outputs.scope == 'filtered'
+        run: |
+          xcodebuild test \
+            -project OneTrack.xcodeproj \
+            -scheme OneTrack \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.4' \
+            CODE_SIGNING_ALLOWED=NO \
+            ${{ steps.scope.outputs.filters }} \
+            | xcpretty --color
+
+      - name: Build only (no test changes)
+        if: steps.scope.outputs.scope == 'build-only'
+        run: |
+          xcodebuild build \
+            -project OneTrack.xcodeproj \
+            -scheme OneTrack \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.4' \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcpretty --color
