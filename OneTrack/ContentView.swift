@@ -1,5 +1,5 @@
 import SwiftUI
-import UserNotifications
+@preconcurrency import UserNotifications
 
 struct ContentView: View {
     @State private var healthKit = HealthKitManager()
@@ -25,19 +25,15 @@ struct ContentView: View {
         .task {
             await healthKit.requestAuthorization()
             await healthKit.fetchAll()
-            // Request notification permission at app launch — NOT during workout
-            // to avoid conflicts with fullScreenCover presentation
-            requestNotificationPermission()
+            await requestNotificationPermission()
         }
     }
 
-    private func requestNotificationPermission() {
+    private func requestNotificationPermission() async {
         let center = UNUserNotificationCenter.current()
-        center.getNotificationSettings { settings in
-            if settings.authorizationStatus == .notDetermined {
-                center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
-            }
-        }
+        let settings = await center.notificationSettings()
+        guard settings.authorizationStatus == .notDetermined else { return }
+        try? await center.requestAuthorization(options: [.alert, .sound])
     }
 }
 
