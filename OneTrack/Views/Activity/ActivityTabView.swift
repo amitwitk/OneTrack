@@ -50,20 +50,34 @@ struct ActivityTabView: View {
             }
             .navigationTitle("Activity")
             .task {
-                if !hasLoaded || healthKit.isStale {
+                if !hasLoaded {
                     if !healthKit.isAuthorized {
                         await healthKit.requestAuthorization()
                     }
-                    await loadData()
+                    // If data not yet prefetched (e.g. first launch race), fetch now
+                    if healthKit.cachedDailySteps.isEmpty {
+                        await healthKit.fetchAll()
+                    }
+                    // Build from cached data — synchronous, instant
+                    rebuildFromCache()
                     hasLoaded = true
                 }
             }
             .refreshable {
                 await healthKit.fetchAll()
-                await loadData()
+                rebuildFromCache()
             }
             .onChange(of: chartRange) {
-                Task { await loadData() }
+                if chartRange == .month && healthKit.cachedDailySteps.count < 30 {
+                    Task {
+                        // Need more data for month view
+                        let steps = await healthKit.fetchDailySteps(days: 30)
+                        let cals = await healthKit.fetchDailyCalories(days: 30)
+                        buildCachedValues(steps: steps, calories: cals, streakData: healthKit.cachedStreakSteps)
+                    }
+                } else {
+                    rebuildFromCache()
+                }
             }
             .onChange(of: completedSessions.count) {
                 updateWorkoutDates()
@@ -392,27 +406,27 @@ struct ActivityTabView: View {
         .frame(height: 100)
     }
 
-    // MARK: - Data Loading
+    // MARK: - Data Building (synchronous — uses prefetched data)
 
-    private func loadData() async {
-        let fetchDays = max(chartRange.days, 14)
+    /// Rebuilds all cached values from HealthKitManager's prefetched data.
+    private func rebuildFromCache() {
+        buildCachedValues(
+            steps: healthKit.cachedDailySteps,
+            calories: healthKit.cachedDailyCalories,
+            streakData: healthKit.cachedStreakSteps
+        )
+    }
 
-        // Parallel fetch — all 3 HealthKit queries at once
-        async let stepsResult = healthKit.fetchDailySteps(days: fetchDays)
-        async let caloriesResult = healthKit.fetchDailyCalories(days: fetchDays)
-        async let streakResult = healthKit.fetchDailySteps(days: 30)
-
-        let steps = await stepsResult
-        let calories = await caloriesResult
-        let streakData = await streakResult
-
-        // Compute and cache — done once, not per render
+    private func buildCachedValues(
+        steps: [(date: Date, steps: Int)],
+        calories: [(date: Date, calories: Double)],
+        streakData: [(date: Date, steps: Int)]
+    ) {
         let displayDays = chartRange == .week ? 7 : 30
         dailyActivity = ActivityCalculations.dailyActivity(
             dailySteps: Array(steps.suffix(displayDays)),
             dailyCalories: Array(calories.suffix(displayDays))
         )
-
         streak = ActivityCalculations.streakDays(dailySteps: streakData, goal: stepGoal)
 
         let (thisWeekSteps, lastWeekSteps) = ActivityCalculations.splitWeeks(
