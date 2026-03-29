@@ -276,7 +276,7 @@ final class WorkoutEngine {
 
     private func startElapsedTimer() {
         timerTask?.cancel()
-        timerTask = Task { [weak self] in
+        timerTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled, let self, let session = self.session else { break }
@@ -287,7 +287,7 @@ final class WorkoutEngine {
 
     private func startRestTimerTask() {
         restTimerTask?.cancel()
-        restTimerTask = Task { [weak self] in
+        restTimerTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 guard let self, self.isResting, let endDate = self.restTimerEndDate else { break }
                 try? await Task.sleep(for: .seconds(1))
