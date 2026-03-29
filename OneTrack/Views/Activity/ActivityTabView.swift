@@ -5,9 +5,13 @@ import Charts
 struct ActivityTabView: View {
     var healthKit: HealthKitManager
 
-    @State private var dailySteps: [(date: Date, steps: Int)] = []
-    @State private var dailyCalories: [(date: Date, calories: Double)] = []
-    @State private var streakSteps: [(date: Date, steps: Int)] = [] // 30 days for streak calc
+    // Cached chart data — set once in loadData(), not recomputed per render
+    @State private var dailyActivity: [ActivityCalculations.DailyActivity] = []
+    @State private var streak: Int = 0
+    @State private var stepsComparison: ActivityCalculations.WeekComparison = .init(percentage: 0, direction: "same")
+    @State private var caloriesComparison: ActivityCalculations.WeekComparison = .init(percentage: 0, direction: "same")
+    @State private var workoutDates: Set<Date> = []
+
     @State private var hasLoaded = false
     @State private var chartRange: ActivityChartRange = .week
 
@@ -18,36 +22,6 @@ struct ActivityTabView: View {
     @AppStorage("dailyStepGoal") private var stepGoal: Int = 10000
     @AppStorage("dailyCalorieGoal") private var calorieGoal: Int = 500
 
-    private var dailyActivity: [ActivityCalculations.DailyActivity] {
-        let displayDays = chartRange == .week ? 7 : 30
-        let stepsSlice = Array(dailySteps.suffix(displayDays))
-        let calsSlice = Array(dailyCalories.suffix(displayDays))
-        return ActivityCalculations.dailyActivity(dailySteps: stepsSlice, dailyCalories: calsSlice)
-    }
-
-    private var streak: Int {
-        ActivityCalculations.streakDays(dailySteps: streakSteps, goal: stepGoal)
-    }
-
-    private var stepsComparison: ActivityCalculations.WeekComparison {
-        let (thisWeek, lastWeek) = ActivityCalculations.splitWeeks(
-            data: dailySteps.map { (date: $0.date, value: $0.steps) }
-        )
-        return ActivityCalculations.weekOverWeekChange(thisWeek: thisWeek, lastWeek: lastWeek)
-    }
-
-    private var caloriesComparison: ActivityCalculations.WeekComparison {
-        let (thisWeek, lastWeek) = ActivityCalculations.splitWeeks(
-            data: dailyCalories.map { (date: $0.date, value: Int($0.calories)) }
-        )
-        return ActivityCalculations.weekOverWeekChange(thisWeek: thisWeek, lastWeek: lastWeek)
-    }
-
-    private var workoutDates: Set<Date> {
-        let calendar = Calendar.current
-        return Set(completedSessions.map { calendar.startOfDay(for: $0.date) })
-    }
-
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -57,11 +31,18 @@ struct ActivityTabView: View {
                     } else if !healthKit.isAuthorized && hasLoaded {
                         unauthorizedView
                     } else {
+                        // Today cards show immediately from prefetched healthKit values
                         todayCards
+
                         if streak > 0 { streakCard }
-                        chartRangePicker
-                        stepsChart
-                        caloriesChart
+
+                        // Charts render only after data is loaded
+                        if hasLoaded {
+                            chartRangePicker
+                            stepsChart
+                            caloriesChart
+                        }
+
                         goalsSection
                     }
                 }
@@ -83,6 +64,9 @@ struct ActivityTabView: View {
             }
             .onChange(of: chartRange) {
                 Task { await loadData() }
+            }
+            .onChange(of: completedSessions.count) {
+                updateWorkoutDates()
             }
         }
     }
@@ -115,7 +99,6 @@ struct ActivityTabView: View {
         let progress = ActivityCalculations.goalProgress(current: current, goal: goal)
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
-                // Progress ring
                 ZStack {
                     Circle()
                         .stroke(color.opacity(0.15), lineWidth: 4)
@@ -197,7 +180,6 @@ struct ActivityTabView: View {
                         .foregroundStyle(.green.gradient)
                         .cornerRadius(chartRange == .month ? 2 : 4)
                     }
-                    // Workout day indicators
                     ForEach(dailyActivity.filter { workoutDates.contains(Calendar.current.startOfDay(for: $0.date)) }) { day in
                         PointMark(
                             x: .value("Day", day.date, unit: .day),
@@ -413,10 +395,41 @@ struct ActivityTabView: View {
     // MARK: - Data Loading
 
     private func loadData() async {
-        let fetchDays = max(chartRange.days, 14) // at least 14 for week comparison
-        dailySteps = await healthKit.fetchDailySteps(days: fetchDays)
-        dailyCalories = await healthKit.fetchDailyCalories(days: fetchDays)
-        streakSteps = await healthKit.fetchDailySteps(days: 30)
+        let fetchDays = max(chartRange.days, 14)
+
+        // Fetch steps, calories, and streak data in parallel
+        async let stepsResult = healthKit.fetchDailySteps(days: fetchDays)
+        async let caloriesResult = healthKit.fetchDailyCalories(days: fetchDays)
+        async let streakResult = healthKit.fetchDailySteps(days: 30)
+
+        let steps = await stepsResult
+        let calories = await caloriesResult
+        let streakData = await streakResult
+
+        // Build cached values once
+        let displayDays = chartRange == .week ? 7 : 30
+        let stepsSlice = Array(steps.suffix(displayDays))
+        let calsSlice = Array(calories.suffix(displayDays))
+        dailyActivity = ActivityCalculations.dailyActivity(dailySteps: stepsSlice, dailyCalories: calsSlice)
+
+        streak = ActivityCalculations.streakDays(dailySteps: streakData, goal: stepGoal)
+
+        let (thisWeekSteps, lastWeekSteps) = ActivityCalculations.splitWeeks(
+            data: steps.map { (date: $0.date, value: $0.steps) }
+        )
+        stepsComparison = ActivityCalculations.weekOverWeekChange(thisWeek: thisWeekSteps, lastWeek: lastWeekSteps)
+
+        let (thisWeekCals, lastWeekCals) = ActivityCalculations.splitWeeks(
+            data: calories.map { (date: $0.date, value: Int($0.calories)) }
+        )
+        caloriesComparison = ActivityCalculations.weekOverWeekChange(thisWeek: thisWeekCals, lastWeek: lastWeekCals)
+
+        updateWorkoutDates()
+    }
+
+    private func updateWorkoutDates() {
+        let calendar = Calendar.current
+        workoutDates = Set(completedSessions.map { calendar.startOfDay(for: $0.date) })
     }
 }
 
