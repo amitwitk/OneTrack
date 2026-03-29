@@ -335,6 +335,21 @@ struct EditExerciseView: View {
                 }
             }
 
+            Section("Exercise Type") {
+                Picker("Type", selection: $exercise.isIsometric) {
+                    Text("Reps").tag(false)
+                    Text("Seconds (Isometric)").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: exercise.isIsometric) {
+                    if exercise.isIsometric && exercise.targetSeconds == 0 {
+                        exercise.targetSeconds = 30
+                    } else if !exercise.isIsometric && exercise.targetReps == 0 {
+                        exercise.targetReps = 10
+                    }
+                }
+            }
+
             Section("Sets & Reps") {
                 Stepper("Sets: \(exercise.targetSets)", value: $exercise.targetSets, in: 1...10)
 

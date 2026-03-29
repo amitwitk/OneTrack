@@ -3,7 +3,8 @@ import SwiftData
 import Charts
 
 struct ActivityTabView: View {
-    @State private var healthKit = HealthKitManager()
+    var healthKit: HealthKitManager
+
     @State private var dailySteps: [(date: Date, steps: Int)] = []
     @State private var dailyCalories: [(date: Date, calories: Double)] = []
     @State private var streakSteps: [(date: Date, steps: Int)] = [] // 30 days for streak calc
@@ -68,8 +69,10 @@ struct ActivityTabView: View {
             }
             .navigationTitle("Activity")
             .task {
-                if !hasLoaded {
-                    await healthKit.requestAuthorization()
+                if !hasLoaded || healthKit.isStale {
+                    if !healthKit.isAuthorized {
+                        await healthKit.requestAuthorization()
+                    }
                     await loadData()
                     hasLoaded = true
                 }

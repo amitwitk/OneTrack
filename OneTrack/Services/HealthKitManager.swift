@@ -8,6 +8,13 @@ final class HealthKitManager {
     var todaySteps: Int = 0
     var todayActiveCalories: Double = 0
     var latestWeight: Double?
+    private(set) var lastFetchDate: Date?
+
+    /// Whether data is stale (older than 5 minutes or never fetched).
+    var isStale: Bool {
+        guard let lastFetch = lastFetchDate else { return true }
+        return Date.now.timeIntervalSince(lastFetch) > 300
+    }
 
     private let healthStore = HKHealthStore()
     private var observerQuery: HKObserverQuery?
@@ -52,6 +59,7 @@ final class HealthKitManager {
         todaySteps = await fetchTodaySteps()
         todayActiveCalories = await fetchTodayActiveCalories()
         latestWeight = await fetchLatestWeight()
+        lastFetchDate = .now
     }
 
     // MARK: - Historical Weight Import
