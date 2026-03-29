@@ -168,12 +168,44 @@ final class WorkoutEngine {
         try? modelContext.save()
     }
 
+    // MARK: - Auto-fill
+
+    /// After completing a set, auto-fills the next uncompleted set with the same weight/reps/seconds.
+    /// Does NOT overwrite if the user already entered values (value > 0).
+    func autoFillNextSet(after completedSet: SetLog, in log: ExerciseLog) {
+        let sorted = log.sets.sorted { $0.setNumber < $1.setNumber }
+        guard let nextSet = sorted.first(where: { $0.setNumber > completedSet.setNumber && !$0.isCompleted }) else { return }
+
+        if nextSet.weightKg == 0 {
+            nextSet.weightKg = completedSet.weightKg
+        }
+
+        if log.isIsometric {
+            if nextSet.seconds == 0 {
+                nextSet.seconds = completedSet.seconds
+            }
+        } else {
+            if nextSet.reps == 0 {
+                nextSet.reps = completedSet.reps
+            }
+        }
+    }
+
+    /// Returns true if the given set is the last set in its exercise log (by setNumber).
+    static func isLastSetInExercise(_ setLog: SetLog, in log: ExerciseLog) -> Bool {
+        let maxSetNumber = log.sets.map(\.setNumber).max() ?? 0
+        return setLog.setNumber >= maxSetNumber
+    }
+
     // MARK: - Rest Timer
+
+    private(set) var restTimerEndDate: Date?
 
     func startRestTimer(duration: Int? = nil) {
         guard let session else { return }
         restDuration = duration ?? (session.plan?.defaultRestSeconds ?? 90)
         restTimeRemaining = restDuration
+        restTimerEndDate = Date.now.addingTimeInterval(Double(restDuration))
         isResting = true
         startRestTimerTask()
     }
@@ -181,8 +213,20 @@ final class WorkoutEngine {
     func skipRestTimer() {
         isResting = false
         restTimeRemaining = 0
+        restTimerEndDate = nil
         restTimerTask?.cancel()
         restTimerTask = nil
+    }
+
+    /// Recalculates rest timer from the stored end date (call when app returns to foreground).
+    func recalculateRestTimer() {
+        guard isResting, let endDate = restTimerEndDate else { return }
+        let remaining = Int(endDate.timeIntervalSinceNow)
+        if remaining <= 0 {
+            skipRestTimer()
+        } else {
+            restTimeRemaining = remaining
+        }
     }
 
     func exerciseRestDuration(for log: ExerciseLog) -> Int? {
@@ -245,13 +289,18 @@ final class WorkoutEngine {
         restTimerTask?.cancel()
         restTimerTask = Task { [weak self] in
             while !Task.isCancelled {
-                guard let self, self.isResting, self.restTimeRemaining > 0 else { break }
+                guard let self, self.isResting, let endDate = self.restTimerEndDate else { break }
                 try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled else { break }
-                self.restTimeRemaining -= 1
-            }
-            if let self, self.restTimeRemaining <= 0 {
-                self.isResting = false
+                let remaining = Int(endDate.timeIntervalSinceNow)
+                if remaining <= 0 {
+                    self.restTimeRemaining = 0
+                    self.isResting = false
+                    self.restTimerEndDate = nil
+                    break
+                } else {
+                    self.restTimeRemaining = remaining
+                }
             }
         }
     }
