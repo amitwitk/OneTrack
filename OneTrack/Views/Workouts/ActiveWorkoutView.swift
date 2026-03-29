@@ -64,8 +64,11 @@ struct ActiveWorkoutView: View {
                                 log: log,
                                 previousSession: previousSession,
                                 modelContext: modelContext,
-                                onSetCompleted: {
-                                    startRestTimer(duration: exerciseRestSeconds)
+                                onSetCompleted: { completedSet in
+                                    engine?.autoFillNextSet(in: log, afterSet: completedSet)
+                                    if engine?.shouldStartRestTimer(in: log, afterSet: completedSet) == true {
+                                        startRestTimer(duration: exerciseRestSeconds)
+                                    }
                                 },
                                 onPRDetected: {
                                     triggerPRCelebration()
@@ -262,6 +265,17 @@ struct ActiveWorkoutView: View {
                         .foregroundStyle(.blue)
                 }
             }
+
+            // Linear progress bar
+            VStack(spacing: 4) {
+                ProgressView(value: progress)
+                    .tint(.blue)
+                    .animation(.easeInOut(duration: 0.3), value: progress)
+
+                Text("\(completedCount) of \(totalCount) working sets")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
         .cardStyle()
     }
@@ -379,7 +393,7 @@ private struct ExerciseSectionView: View {
     let log: ExerciseLog
     let previousSession: WorkoutSession?
     let modelContext: ModelContext
-    let onSetCompleted: () -> Void
+    let onSetCompleted: (SetLog) -> Void
     let onPRDetected: () -> Void
     let onAddSet: () -> Void
     let onDeleteSet: (SetLog) -> Void
@@ -533,7 +547,7 @@ private struct ExerciseSectionView: View {
                     isIsometric: log.isIsometric,
                     exerciseName: log.exerciseName,
                     modelContext: modelContext,
-                    onCompleted: onSetCompleted,
+                    onCompleted: { onSetCompleted(setLog) },
                     onPRDetected: onPRDetected
                 )
                 .contextMenu {
