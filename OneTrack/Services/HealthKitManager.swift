@@ -10,6 +10,11 @@ final class HealthKitManager {
     var latestWeight: Double?
     private(set) var lastFetchDate: Date?
 
+    // Prefetched activity data — populated by prefetchActivityData()
+    private(set) var cachedDailySteps: [(date: Date, steps: Int)] = []
+    private(set) var cachedDailyCalories: [(date: Date, calories: Double)] = []
+    private(set) var cachedStreakSteps: [(date: Date, steps: Int)] = []
+
     /// Whether data is stale (older than 5 minutes or never fetched).
     var isStale: Bool {
         guard let lastFetch = lastFetchDate else { return true }
@@ -56,9 +61,20 @@ final class HealthKitManager {
     // MARK: - Fetch All (existing)
 
     func fetchAll() async {
-        todaySteps = await fetchTodaySteps()
-        todayActiveCalories = await fetchTodayActiveCalories()
-        latestWeight = await fetchLatestWeight()
+        // Fetch everything in parallel
+        async let stepsResult = fetchTodaySteps()
+        async let caloriesResult = fetchTodayActiveCalories()
+        async let weightResult = fetchLatestWeight()
+        async let dailyStepsResult = fetchDailySteps(days: 14)
+        async let dailyCaloriesResult = fetchDailyCalories(days: 14)
+        async let streakStepsResult = fetchDailySteps(days: 30)
+
+        todaySteps = await stepsResult
+        todayActiveCalories = await caloriesResult
+        latestWeight = await weightResult
+        cachedDailySteps = await dailyStepsResult
+        cachedDailyCalories = await dailyCaloriesResult
+        cachedStreakSteps = await streakStepsResult
         lastFetchDate = .now
     }
 
