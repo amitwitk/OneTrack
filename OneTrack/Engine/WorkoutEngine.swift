@@ -168,6 +168,36 @@ final class WorkoutEngine {
         try? modelContext.save()
     }
 
+    // MARK: - Auto-fill
+
+    /// After completing a set, auto-populate the next uncompleted set in the same
+    /// exercise with the same weight and reps/seconds. Does NOT overwrite user-entered values.
+    func autoFillNextSet(in log: ExerciseLog, afterSet completedSet: SetLog) {
+        let sorted = log.sets.sorted { $0.setNumber < $1.setNumber }
+        guard let nextSet = sorted.first(where: { !$0.isCompleted && $0.setNumber > completedSet.setNumber }) else {
+            return
+        }
+        if nextSet.weightKg == 0 {
+            nextSet.weightKg = completedSet.weightKg
+        }
+        if log.isIsometric {
+            if nextSet.seconds == 0 {
+                nextSet.seconds = completedSet.seconds
+            }
+        } else {
+            if nextSet.reps == 0 {
+                nextSet.reps = completedSet.reps
+            }
+        }
+    }
+
+    /// Returns true if the rest timer should fire after completing a set.
+    /// Skips the timer if the completed set is the last set in its exercise log.
+    func shouldStartRestTimer(in log: ExerciseLog, afterSet completedSet: SetLog) -> Bool {
+        let sorted = log.sets.sorted { $0.setNumber < $1.setNumber }
+        return sorted.last?.setNumber != completedSet.setNumber
+    }
+
     // MARK: - Rest Timer
 
     func startRestTimer(duration: Int? = nil) {

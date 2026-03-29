@@ -152,4 +152,195 @@ struct WorkoutEngineTests {
         // 60 * (1 + 10/30) = 80
         #expect(result == 80.0)
     }
+
+    // MARK: - Auto-fill
+
+    @Test func autoFillNextSet_copiesWeightAndReps() throws {
+        let (engine, context) = try makeEngine()
+
+        let log = ExerciseLog(exerciseName: "Bench", sortOrder: 0)
+        context.insert(log)
+
+        let set1 = SetLog(setNumber: 1, reps: 8, weightKg: 60)
+        set1.isCompleted = true
+        set1.exerciseLog = log
+        context.insert(set1)
+
+        let set2 = SetLog(setNumber: 2, reps: 0, weightKg: 0)
+        set2.exerciseLog = log
+        context.insert(set2)
+
+        try context.save()
+
+        engine.autoFillNextSet(in: log, afterSet: set1)
+
+        #expect(set2.reps == 8)
+        #expect(set2.weightKg == 60)
+    }
+
+    @Test func autoFillNextSet_doesNotOverwriteUserValues() throws {
+        let (engine, context) = try makeEngine()
+
+        let log = ExerciseLog(exerciseName: "Squat", sortOrder: 0)
+        context.insert(log)
+
+        let set1 = SetLog(setNumber: 1, reps: 10, weightKg: 80)
+        set1.isCompleted = true
+        set1.exerciseLog = log
+        context.insert(set1)
+
+        let set2 = SetLog(setNumber: 2, reps: 5, weightKg: 70)
+        set2.exerciseLog = log
+        context.insert(set2)
+
+        try context.save()
+
+        engine.autoFillNextSet(in: log, afterSet: set1)
+
+        #expect(set2.reps == 5)
+        #expect(set2.weightKg == 70)
+    }
+
+    @Test func autoFillNextSet_skipsCompletedSets() throws {
+        let (engine, context) = try makeEngine()
+
+        let log = ExerciseLog(exerciseName: "Row", sortOrder: 0)
+        context.insert(log)
+
+        let set1 = SetLog(setNumber: 1, reps: 8, weightKg: 50)
+        set1.isCompleted = true
+        set1.exerciseLog = log
+        context.insert(set1)
+
+        let set2 = SetLog(setNumber: 2, reps: 8, weightKg: 50)
+        set2.isCompleted = true
+        set2.exerciseLog = log
+        context.insert(set2)
+
+        let set3 = SetLog(setNumber: 3, reps: 0, weightKg: 0)
+        set3.exerciseLog = log
+        context.insert(set3)
+
+        try context.save()
+
+        engine.autoFillNextSet(in: log, afterSet: set1)
+
+        #expect(set3.reps == 8)
+        #expect(set3.weightKg == 50)
+    }
+
+    @Test func autoFillNextSet_isometricCopiesSeconds() throws {
+        let (engine, context) = try makeEngine()
+
+        let log = ExerciseLog(exerciseName: "Plank", sortOrder: 0, isIsometric: true)
+        context.insert(log)
+
+        let set1 = SetLog(setNumber: 1, reps: 0, seconds: 45, weightKg: 10)
+        set1.isCompleted = true
+        set1.exerciseLog = log
+        context.insert(set1)
+
+        let set2 = SetLog(setNumber: 2, reps: 0, seconds: 0, weightKg: 0)
+        set2.exerciseLog = log
+        context.insert(set2)
+
+        try context.save()
+
+        engine.autoFillNextSet(in: log, afterSet: set1)
+
+        #expect(set2.seconds == 45)
+        #expect(set2.weightKg == 10)
+    }
+
+    @Test func autoFillNextSet_noopWhenLastSet() throws {
+        let (engine, context) = try makeEngine()
+
+        let log = ExerciseLog(exerciseName: "Curl", sortOrder: 0)
+        context.insert(log)
+
+        let set1 = SetLog(setNumber: 1, reps: 10, weightKg: 15)
+        set1.isCompleted = true
+        set1.exerciseLog = log
+        context.insert(set1)
+
+        try context.save()
+
+        engine.autoFillNextSet(in: log, afterSet: set1)
+        // No crash, no side effects
+    }
+
+    // MARK: - Skip inter-exercise timer
+
+    @Test func shouldStartRestTimer_trueForMidExerciseSet() throws {
+        let (engine, context) = try makeEngine()
+
+        let log = ExerciseLog(exerciseName: "Bench", sortOrder: 0)
+        context.insert(log)
+
+        let set1 = SetLog(setNumber: 1, reps: 8, weightKg: 60)
+        set1.exerciseLog = log
+        context.insert(set1)
+
+        let set2 = SetLog(setNumber: 2, reps: 8, weightKg: 60)
+        set2.exerciseLog = log
+        context.insert(set2)
+
+        try context.save()
+
+        #expect(engine.shouldStartRestTimer(in: log, afterSet: set1) == true)
+    }
+
+    @Test func shouldStartRestTimer_falseForLastSetOfExercise() throws {
+        let (engine, context) = try makeEngine()
+
+        let log = ExerciseLog(exerciseName: "Bench", sortOrder: 0)
+        context.insert(log)
+
+        let set1 = SetLog(setNumber: 1, reps: 8, weightKg: 60)
+        set1.exerciseLog = log
+        context.insert(set1)
+
+        let set2 = SetLog(setNumber: 2, reps: 8, weightKg: 60)
+        set2.exerciseLog = log
+        context.insert(set2)
+
+        try context.save()
+
+        #expect(engine.shouldStartRestTimer(in: log, afterSet: set2) == false)
+    }
+
+    // MARK: - Progress excludes warm-ups
+
+    @Test func progress_excludesWarmUpSets() throws {
+        let (engine, context) = try makeEngine()
+
+        let session = WorkoutSession()
+        context.insert(session)
+
+        let log = ExerciseLog(exerciseName: "Squat", sortOrder: 0)
+        log.session = session
+        context.insert(log)
+
+        let warmUp = SetLog(setNumber: 1, reps: 5, weightKg: 40, setType: .warmUp)
+        warmUp.isCompleted = true
+        warmUp.exerciseLog = log
+        context.insert(warmUp)
+
+        let working1 = SetLog(setNumber: 2, reps: 5, weightKg: 100)
+        working1.isCompleted = true
+        working1.exerciseLog = log
+        context.insert(working1)
+
+        let working2 = SetLog(setNumber: 3, reps: 5, weightKg: 100)
+        working2.exerciseLog = log
+        context.insert(working2)
+
+        try context.save()
+
+        engine.resumeSession(session, previous: nil)
+
+        #expect(engine.completedCount == 1)
+        #expect(engine.totalCount == 2)
+        #expect(engine.progress == 0.5)
+    }
 }
