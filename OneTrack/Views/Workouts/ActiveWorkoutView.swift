@@ -230,6 +230,7 @@ struct ActiveWorkoutView: View {
                 e.resumeSession(session, previous: previousSession)
                 engine = e
             }
+            requestNotificationPermission()
         }
         .sensoryFeedback(.success, trigger: completedCount)
         .onChange(of: scenePhase) {
@@ -351,18 +352,25 @@ struct ActiveWorkoutView: View {
         scheduleRestNotification(seconds: duration ?? engine?.restDuration ?? 90)
     }
 
+    private func requestNotificationPermission() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    }
+
     private func scheduleRestNotification(seconds: Int) {
+        guard seconds > 0 else { return }
         let center = UNUserNotificationCenter.current()
-        center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        center.getNotificationSettings { settings in
+            guard settings.authorizationStatus == .authorized else { return }
 
-        let content = UNMutableNotificationContent()
-        content.title = "Rest Over"
-        content.body = "Time for your next set!"
-        content.sound = .default
+            let content = UNMutableNotificationContent()
+            content.title = "Rest Over"
+            content.body = "Time for your next set!"
+            content.sound = .default
 
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: Double(seconds), repeats: false)
-        let request = UNNotificationRequest(identifier: "rest-timer", content: content, trigger: trigger)
-        center.add(request)
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: Double(seconds), repeats: false)
+            let request = UNNotificationRequest(identifier: "rest-timer", content: content, trigger: trigger)
+            center.add(request)
+        }
     }
 
     private func cancelRestNotification() {
