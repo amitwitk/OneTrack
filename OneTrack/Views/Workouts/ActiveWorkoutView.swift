@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UserNotifications
 
 struct ActiveWorkoutView: View {
     @Bindable var session: WorkoutSession
@@ -7,6 +8,7 @@ struct ActiveWorkoutView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @State private var engine: WorkoutEngine?
     @State private var showFinishConfirmation = false
     @State private var showCancelConfirmation = false
@@ -64,8 +66,13 @@ struct ActiveWorkoutView: View {
                                 log: log,
                                 previousSession: previousSession,
                                 modelContext: modelContext,
-                                onSetCompleted: {
-                                    startRestTimer(duration: exerciseRestSeconds)
+                                onSetCompleted: { completedSet in
+                                    // Auto-fill next set
+                                    engine?.autoFillNextSet(after: completedSet, in: log)
+                                    // Only start rest timer if NOT the last set
+                                    if !WorkoutEngine.isLastSetInExercise(completedSet, in: log) {
+                                        startRestTimer(duration: exerciseRestSeconds)
+                                    }
                                 },
                                 onPRDetected: {
                                     triggerPRCelebration()
@@ -111,6 +118,16 @@ struct ActiveWorkoutView: View {
         }
         .background(Color(.systemGroupedBackground))
         .navigationTitle(session.plan?.name ?? "Workout")
+        .toolbarTitleMenu {
+            Text("\(completedCount)/\(totalCount) sets")
+                .font(.caption)
+        }
+        .safeAreaInset(edge: .top) {
+            ProgressView(value: progress)
+                .tint(.blue)
+                .scaleEffect(y: 0.5)
+                .padding(.horizontal)
+        }
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden()
         .toolbar {
@@ -215,6 +232,11 @@ struct ActiveWorkoutView: View {
             }
         }
         .sensoryFeedback(.success, trigger: completedCount)
+        .onChange(of: scenePhase) {
+            if scenePhase == .active {
+                engine?.recalculateRestTimer()
+            }
+        }
     }
 
     // MARK: - Header Card
@@ -300,6 +322,7 @@ struct ActiveWorkoutView: View {
 
             Button {
                 withAnimation { engine?.skipRestTimer() }
+                cancelRestNotification()
             } label: {
                 Text("Skip")
                     .font(.subheadline.bold())
@@ -325,6 +348,25 @@ struct ActiveWorkoutView: View {
 
     private func startRestTimer(duration: Int? = nil) {
         withAnimation { engine?.startRestTimer(duration: duration) }
+        scheduleRestNotification(seconds: duration ?? engine?.restDuration ?? 90)
+    }
+
+    private func scheduleRestNotification(seconds: Int) {
+        let center = UNUserNotificationCenter.current()
+        center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+
+        let content = UNMutableNotificationContent()
+        content.title = "Rest Over"
+        content.body = "Time for your next set!"
+        content.sound = .default
+
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: Double(seconds), repeats: false)
+        let request = UNNotificationRequest(identifier: "rest-timer", content: content, trigger: trigger)
+        center.add(request)
+    }
+
+    private func cancelRestNotification() {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["rest-timer"])
     }
 
     private func deleteSet(_ setLog: SetLog, from log: ExerciseLog) {
@@ -379,7 +421,7 @@ private struct ExerciseSectionView: View {
     let log: ExerciseLog
     let previousSession: WorkoutSession?
     let modelContext: ModelContext
-    let onSetCompleted: () -> Void
+    let onSetCompleted: (SetLog) -> Void
     let onPRDetected: () -> Void
     let onAddSet: () -> Void
     let onDeleteSet: (SetLog) -> Void
@@ -533,7 +575,7 @@ private struct ExerciseSectionView: View {
                     isIsometric: log.isIsometric,
                     exerciseName: log.exerciseName,
                     modelContext: modelContext,
-                    onCompleted: onSetCompleted,
+                    onCompleted: { completedSet in onSetCompleted(completedSet) },
                     onPRDetected: onPRDetected
                 )
                 .contextMenu {
@@ -587,7 +629,7 @@ private struct SetRowView: View {
     let isIsometric: Bool
     let exerciseName: String
     let modelContext: ModelContext
-    let onCompleted: () -> Void
+    let onCompleted: (SetLog) -> Void
     let onPRDetected: () -> Void
 
     private var isImproved: Bool {
@@ -682,7 +724,7 @@ private struct SetRowView: View {
                 if !setLog.isCompleted {
                     setLog.isCompleted = true
                     checkForPR()
-                    onCompleted()
+                    onCompleted(setLog)
                 } else {
                     setLog.isCompleted = false
                     setLog.isPersonalRecord = false
