@@ -230,7 +230,7 @@ struct ActiveWorkoutView: View {
                 e.resumeSession(session, previous: previousSession)
                 engine = e
             }
-            requestNotificationPermission()
+            requestNotificationPermissionIfNeeded()
         }
         .sensoryFeedback(.success, trigger: completedCount)
         .onChange(of: scenePhase) {
@@ -352,8 +352,16 @@ struct ActiveWorkoutView: View {
         scheduleRestNotification(seconds: duration ?? engine?.restDuration ?? 90)
     }
 
-    private func requestNotificationPermission() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    private func requestNotificationPermissionIfNeeded() {
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { settings in
+            guard settings.authorizationStatus == .notDetermined else { return }
+            // Delay to avoid showing system dialog while fullScreenCover is animating
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(1))
+                center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+            }
+        }
     }
 
     private func scheduleRestNotification(seconds: Int) {
