@@ -22,9 +22,6 @@ struct WorkoutPlanListView: View {
                 planList
             }
         }
-        .onAppear {
-            cleanupStaleSessions()
-        }
         .fullScreenCover(item: $activeSession) { session in
             NavigationStack {
                 ActiveWorkoutView(session: session, previousSession: previousSessionForActive)
@@ -251,19 +248,6 @@ struct WorkoutPlanListView: View {
         try? modelContext.save()
         previousSessionForActive = previous
         activeSession = session
-    }
-
-    /// Deletes incomplete sessions older than 24 hours — they are stale
-    /// (e.g. from before a redeployment) and cannot be meaningfully resumed.
-    private func cleanupStaleSessions() {
-        let cutoff = Calendar.current.date(byAdding: .hour, value: -24, to: .now) ?? .now
-        let stale = incompleteSessions.filter { $0.startedAt < cutoff }
-        for session in stale {
-            modelContext.delete(session)
-        }
-        if !stale.isEmpty {
-            try? modelContext.save()
-        }
     }
 
     private func findPreviousSession(for session: WorkoutSession) -> WorkoutSession? {
