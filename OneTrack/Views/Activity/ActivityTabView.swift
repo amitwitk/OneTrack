@@ -50,7 +50,7 @@ struct ActivityTabView: View {
             }
             .navigationTitle("Activity")
             .task {
-                if !hasLoaded || healthKit.isStale {
+                if !hasLoaded {
                     if !healthKit.isAuthorized {
                         await healthKit.requestAuthorization()
                     }
@@ -59,7 +59,7 @@ struct ActivityTabView: View {
                 }
             }
             .refreshable {
-                await healthKit.fetchAll()
+                await healthKit.fetchAll()  // Refreshes today + cached 30-day data
                 await loadData()
             }
             .onChange(of: chartRange) {
@@ -395,25 +395,17 @@ struct ActivityTabView: View {
     // MARK: - Data Loading
 
     private func loadData() async {
-        let fetchDays = max(chartRange.days, 14)
+        // Use prefetched 30-day data from HealthKitManager (populated at app launch)
+        let steps = healthKit.cachedDailySteps
+        let calories = healthKit.cachedDailyCalories
 
-        // Parallel fetch — all 3 HealthKit queries at once
-        async let stepsResult = healthKit.fetchDailySteps(days: fetchDays)
-        async let caloriesResult = healthKit.fetchDailyCalories(days: fetchDays)
-        async let streakResult = healthKit.fetchDailySteps(days: 30)
-
-        let steps = await stepsResult
-        let calories = await caloriesResult
-        let streakData = await streakResult
-
-        // Compute and cache — done once, not per render
         let displayDays = chartRange == .week ? 7 : 30
         dailyActivity = ActivityCalculations.dailyActivity(
             dailySteps: Array(steps.suffix(displayDays)),
             dailyCalories: Array(calories.suffix(displayDays))
         )
 
-        streak = ActivityCalculations.streakDays(dailySteps: streakData, goal: stepGoal)
+        streak = ActivityCalculations.streakDays(dailySteps: steps, goal: stepGoal)
 
         let (thisWeekSteps, lastWeekSteps) = ActivityCalculations.splitWeeks(
             data: steps.map { (date: $0.date, value: $0.steps) }
